@@ -15,7 +15,7 @@ from semantic.transformers import gen_transformer
 parser = argparse.ArgumentParser(description='Certify many examples')
 parser.add_argument("dataset", choices=DATASETS, help="which dataset")
 parser.add_argument("base_classifier", type=str, help="path to saved pytorch model of base classifier")
-parser.add_argument("sigma", type=float, help="noise hyperparameter")
+parser.add_argument("noise_sd", type=float, help="noise hyperparameter")
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
                     choices=['rotation-noise', 'noise', 'rotation'])
 parser.add_argument("outfile", type=str, help="output file")
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # iterate through the dataset
     dataset = get_dataset(args.dataset, args.split)
 
-    transformer = gen_transformer(args, dataset[0])
+    transformer = gen_transformer(args, dataset[0][0])
 
     # create the smooothed classifier g
     smoothed_classifier = SemanticSmooth(base_classifier, get_num_classes(args.dataset), transformer)
@@ -68,6 +68,6 @@ if __name__ == "__main__":
         time_elapsed = str(datetime.timedelta(seconds=(after_time - before_time)))
         print("{}\t{}\t{}\t{:.3}\t{}\t{}".format(
             i, label, prediction, radius, correct, time_elapsed), file=f, flush=True)
-        print(i)
+        print(i, time_elapsed)
 
     f.close()

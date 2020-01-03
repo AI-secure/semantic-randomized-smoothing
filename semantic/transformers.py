@@ -8,13 +8,6 @@ class AbstractTransformer:
     def process(self, inputs):
         raise NotImplementedError
 
-    def test(self):
-        """
-            Set to test mode, instead of training or certifying mode
-        :return: None
-        """
-        pass
-
     def calc_radius(self, pABar: float) -> float:
         return 0.0
 
@@ -43,9 +36,13 @@ class RotationNoiseTransformer(AbstractTransformer):
         self.noise_adder = transforms.Noise(self.sigma)
         self.rotation_adder = transforms.Rotation(canopy)
         self.round = 2
+        self.masking = True
 
-    def test(self):
-        self.round = 1
+    def set_round(self, r=1):
+        self.round = r
+
+    def enable_masking(self, masking):
+        self.masking = masking
 
     def process(self, inputs):
         # two-round rotation for training & certifying
@@ -55,7 +52,8 @@ class RotationNoiseTransformer(AbstractTransformer):
         for r in range(self.round):
             outs = self.rotation_adder.batch_proc(outs)
         outs = self.noise_adder.batch_proc(outs)
-        outs = self.rotation_adder.batch_masking(outs)
+        if self.masking:
+            outs = self.rotation_adder.batch_masking(outs)
         return outs
 
     def calc_radius(self, pABar: float):
@@ -70,8 +68,8 @@ class RotationTransformer(AbstractTransformer):
         self.rotation_adder = transforms.Rotation(canopy)
         self.round = 2
 
-    def test(self):
-        self.round = 1
+    def set_round(self, r=1):
+        self.round = r
 
     def process(self, inputs):
         # only two-round rotation for training & certifying
@@ -93,5 +91,9 @@ def gen_transformer(args, canopy) -> AbstractTransformer:
         return RotationTransformer(canopy)
     elif args.transtype == 'noise':
         return NoiseTransformer(args.noise_sd)
+    elif args.transtype == 'strict-rotation-noise':
+        rnt = RotationNoiseTransformer(args.noise_sd, canopy)
+        rnt.set_round(1)
+        return rnt
     else:
         raise NotImplementedError

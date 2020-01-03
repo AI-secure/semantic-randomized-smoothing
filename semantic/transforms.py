@@ -60,12 +60,16 @@ class Rotation:
 class Translational:
 
     def __init__(self, sigma):
-        pass
+        self.sigma = sigma
 
     def gen_param(self):
-        pass
+        tx, ty = torch.randn(2)
+        tx, ty = tx.item(), ty.item()
+        return tx * self.sigma, ty * self.sigma
 
-    def proc(self, dx, dy):
+    def proc(self, input, dx, dy):
+        nx, ny = round(dx), round(dy)
+        # TODO
         pass
 
     def batch_proc(self, inputs):

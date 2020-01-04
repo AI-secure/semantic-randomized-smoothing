@@ -17,8 +17,14 @@ parser.add_argument("dataset", choices=DATASETS, help="which dataset")
 parser.add_argument("base_classifier", type=str, help="path to saved pytorch model of base classifier")
 parser.add_argument("noise_sd", type=float, help="noise hyperparameter")
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
-                    choices=['rotation-noise', 'noise', 'rotation'])
+                    choices=['rotation-noise', 'noise', 'rotation', 'translation', 'brightness'])
 parser.add_argument("outfile", type=str, help="output file")
+parser.add_argument('--noise_k', default=0.0, type=float,
+                    help="standard deviation of brightness scaling")
+parser.add_argument('--noise_b', default=0.0, type=float,
+                    help="standard deviation of brightness shift")
+parser.add_argument("--bright_scale", type=float, default=0.0,
+                    help="for brightness transformation, the scale interval is 1.0 +- bright_scale")
 parser.add_argument("--batch", type=int, default=1000, help="batch size")
 parser.add_argument("--skip", type=int, default=1, help="how many examples to skip")
 parser.add_argument("--max", type=int, default=-1, help="stop after this many examples")
@@ -44,6 +50,10 @@ if __name__ == "__main__":
     dataset = get_dataset(args.dataset, args.split)
 
     transformer = gen_transformer(args, dataset[0][0])
+
+    # special setting for brightness
+    if args.transtype == 'brightness':
+        transformer.set_brightness_scale(1.0 - args.bright_scale, 1.0 + args.bright_scale)
 
     # create the smooothed classifier g
     smoothed_classifier = SemanticSmooth(base_classifier, get_num_classes(args.dataset), transformer)

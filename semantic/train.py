@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description='PyTorch Training')
 parser.add_argument('dataset', type=str, choices=DATASETS)
 parser.add_argument('arch', type=str, choices=ARCHITECTURES)
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
-                    choices=['rotation-noise', 'noise', 'rotation', 'strict-rotation-noise'])
+                    choices=['rotation-noise', 'noise', 'rotation', 'strict-rotation-noise', 'translation', 'brightness'])
 parser.add_argument('outdir', type=str, help='folder to save model and training log)')
 parser.add_argument('--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -41,9 +41,15 @@ parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--noise_sd', default=0.0, type=float,
                     help="standard deviation of Gaussian noise for data augmentation")
+parser.add_argument('--rotation_angle', help='constrain the rotation angle to +-rotation angle in degree',
+                    type=float, default=180.0)
+parser.add_argument('--noise_k', default=0.0, type=float,
+                    help="standard deviation of brightness scaling")
+parser.add_argument('--noise_b', default=0.0, type=float,
+                    help="standard deviation of brightness shift")
 parser.add_argument('--gpu', default=None, type=str,
                     help='id(s) for CUDA_VISIBLE_DEVICES')
-parser.add_argument('--print-freq', default=10, type=int,
+parser.add_argument('--print_freq', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 args = parser.parse_args()
 

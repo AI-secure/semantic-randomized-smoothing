@@ -29,6 +29,7 @@ parser.add_argument("--N0", type=int, default=100)
 parser.add_argument("--N", type=int, default=100000, help="number of samples to use")
 parser.add_argument("--slice", type=int, default=1000, help="number of angle slices")
 parser.add_argument("--alpha", type=float, default=0.001, help="failure probability")
+parser.add_argument("--partial", type=float, default=180.0, help="certify +-partial degrees")
 args = parser.parse_args()
 
 if __name__ == '__main__':
@@ -87,6 +88,8 @@ if __name__ == '__main__':
         if cAHat == label:
             good = True
             for j in range(args.slice):
+                if min(360.0 * j / args.slice, 360.0 - 360.0 * (j + 1) / args.slice) >= args.partial:
+                    continue
                 if j % 100 == 0:
                     print(f"> {j}/{args.slice}")
                 now_x = rotationT.rotation_adder.raw_proc(x, 360.0 * j / args.slice).cuda()
@@ -100,7 +103,6 @@ if __name__ == '__main__':
         time_elapsed = str(datetime.timedelta(seconds=(after_time - before_time)))
         print("{}\t{}\t{}\t{:.3}\t{}\t{}".format(
             i, label, cAHat, gap, good, time_elapsed), file=f, flush=True)
-        print(i, good)
 
         tot, tot_good = tot + 1, tot_good + good
         print(f'{i} {good} RACC = {tot_good}/{tot} = {float(tot_good) / float(tot)}')

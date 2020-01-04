@@ -1,6 +1,7 @@
 
 import os
 import random
+import math
 import torch
 import torchvision
 import PIL.Image
@@ -21,7 +22,7 @@ class Noise:
 
 
 class Rotation:
-    def __init__(self, canopy):
+    def __init__(self, canopy, rotation_angle):
         self.h = canopy.shape[-2]
         self.w = canopy.shape[-1]
         assert self.h == self.w
@@ -31,9 +32,10 @@ class Rotation:
                 if (i - (self.h-1)/2.0) ** 2 + (j - (self.w-1)/2.0) ** 2 > ((self.h-1)/2.0) ** 2:
                     self.mask[i][j] = 0
         self.mask.unsqueeze_(0)
+        self.rotation_angle = rotation_angle
 
     def gen_param(self):
-        return random.uniform(0, 360)
+        return random.uniform(-self.rotation_angle, self.rotation_angle)
 
     def raw_proc(self, input, angle):
         pil = TF.to_pil_image(input)
@@ -59,8 +61,9 @@ class Rotation:
 
 class Translational:
 
-    def __init__(self, sigma):
+    def __init__(self, canopy, sigma):
         self.sigma = sigma
+        self.c, self.h, self.w = canopy.shape
 
     def gen_param(self):
         tx, ty = torch.randn(2)
@@ -69,46 +72,127 @@ class Translational:
 
     def proc(self, input, dx, dy):
         nx, ny = round(dx), round(dy)
-        # TODO
-        pass
+        nx, ny = nx % self.h, ny % self.w
+        out = torch.zeros_like(input)
+        if nx > 0 and ny > 0:
+            out[:, -nx:, -ny:] = input[:, :nx, :ny]
+            out[:, -nx:, :-ny] = input[:, :nx, ny:]
+            out[:, :-nx, -ny:] = input[:, nx:, :ny]
+            out[:, :-nx, :-ny] = input[:, nx:, ny:]
+        elif ny > 0:
+            out[:, :, -ny:] = input[:, :, :ny]
+            out[:, :, :-ny] = input[:, :, ny:]
+        elif nx > 0:
+            out[:, -nx:, :] = input[:, :nx, :]
+            out[:, :-nx, :] = input[:, nx:, :]
+        else:
+            out = input
+        return out
 
     def batch_proc(self, inputs):
-        pass
+        outs = torch.zeros_like(inputs)
+        for i in range(len(inputs)):
+            outs[i] = self.proc(inputs[i], *self.gen_param())
+        return outs
 
 
 class BrightnessShift:
 
     def __init__(self, sigma):
-        pass
+        self.sigma = sigma
 
     def gen_param(self):
-        pass
+        d = torch.randn(1).item() * self.sigma
+        return d
 
-    def proc(self, ds):
-        pass
+    def proc(self, input, d):
+        # print(d)
+        return input + d
 
     def batch_proc(self, inputs):
-        pass
+        outs = torch.zeros_like(inputs)
+        for i in range(len(inputs)):
+            outs[i] = self.proc(inputs[i], self.gen_param())
+        return outs
 
 
 class BrightnessScale:
 
     def __init__(self, sigma):
-        pass
+        self.sigma = sigma
 
     def gen_param(self):
-        pass
+        d = torch.randn(1).item() * self.sigma
+        return d
 
-    def proc(self, dk):
+    def proc(self, input, dk):
         # scale by exp(dk)
-        pass
+        # print(dk)
+        return input * math.exp(dk)
 
     def batch_proc(self, inputs):
-        pass
+        outs = torch.zeros_like(inputs)
+        for i in range(len(inputs)):
+            outs[i] = self.proc(inputs[i], self.gen_param())
+        return outs
+
+
+class Resize:
+
+    def __init__(self, sl, sr):
+        self.sl, self.sr = sl, sr
+
+    def gen_param(self):
+        return random.uniform(self.sl, self.sr)
+
+    def proc(self, input, s):
+        c, h, w = input.shape
+        cy, cx = float(h - 1) / 2.0, float(w - 1) / 2.0
+        rows = torch.linspace(0.0, h - 1, steps=h)
+        cols = torch.linspace(0.0, w - 1, steps=w)
+        nys = (rows - cy) / s + cy
+        nxs = (cols - cx) / s + cx
+        ny_mat = nys.unsqueeze(1).repeat(1, w)
+        nx_mat = nxs.repeat(h, 1)
+        nyl_mat, nxl_mat = torch.floor(ny_mat), torch.floor(nx_mat)
+        nyr_mat, nxr_mat = nyl_mat + 1, nxl_mat + 1
+
+        nyl_mat.clamp_(min=0, max=h-1)
+        nyr_mat.clamp_(min=0, max=h-1)
+        nxl_mat.clamp_(min=0, max=w-1)
+        nxr_mat.clamp_(min=0, max=w-1)
+
+        imgymin = max(math.ceil((1 - s) * cy), 0)
+        imgymax = min(math.floor((1 - s) * cy + s * (h - 1)), h - 1)
+        imgxmin = max(math.ceil((1 - s) * cx), 0)
+        imgxmax = min(math.floor((1 - s) * cx + s * (h - 1)), w - 1)
+
+        Pll = torch.gather(torch.index_select(input, dim=1, index=nyl_mat.flatten().type(torch.LongTensor)), dim=2,
+                           index=nxl_mat.flatten().type(torch.LongTensor).repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        Plr = torch.gather(torch.index_select(input, dim=1, index=nyl_mat.flatten().type(torch.LongTensor)), dim=2,
+                           index=nxr_mat.flatten().type(torch.LongTensor).repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        Prl = torch.gather(torch.index_select(input, dim=1, index=nyr_mat.flatten().type(torch.LongTensor)), dim=2,
+                           index=nxl_mat.flatten().type(torch.LongTensor).repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        Prr = torch.gather(torch.index_select(input, dim=1, index=nyr_mat.flatten().type(torch.LongTensor)), dim=2,
+                           index=nxr_mat.flatten().type(torch.LongTensor).repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        out = torch.zeros_like(input)
+        out[:, imgymin: imgymax + 1, imgxmin: imgxmax + 1] = (
+            (ny_mat - nyl_mat) * (nx_mat - nxl_mat) * Prr +
+            (1.0 - ny_mat + nyl_mat) * (nx_mat - nxl_mat) * Plr +
+            (ny_mat - nyl_mat) * (1.0 - nx_mat + nxl_mat) * Prl +
+            (1.0 - ny_mat + nyl_mat) * (1.0 - nx_mat + nxl_mat) * Pll)[:, imgymin: imgymax + 1, imgxmin: imgxmax + 1]
+
+        return out
+
+    def batch_proc(self, inputs):
+        outs = torch.zeros_like(inputs)
+        for i in range(len(inputs)):
+            outs[i] = self.proc(inputs[i], self.gen_param())
+        return outs
 
 
 def visualize(img, outfile):
-    img = torch.tensor(img)
+    img = torch.tensor(img).clamp_(min=0.0, max=1.0)
     if not os.path.exists(os.path.dirname(outfile)):
         os.makedirs(os.path.dirname(outfile))
     torchvision.utils.save_image(img, outfile, range=(0.0, 1.0))

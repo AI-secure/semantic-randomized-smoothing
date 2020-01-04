@@ -11,46 +11,50 @@ from time import time
 import torch
 import datetime
 from architectures import get_architecture
-from semantic.transformers import RotationTransformer
+from semantic.transformers import ResizeTransformer
 from semantic.transforms import visualize
 
 
-def rotate(img, angle, mask):
+def calc_dist_map(canopy):
+    _, h, w = canopy.shape
+    cy, cx = (h - 1.0) / 2.0, (w - 1.0) / 2.0
+    rows = torch.linspace(0.0, h - 1, steps=h)
+    cols = torch.linspace(0.0, w - 1, steps=w)
+    dist_mat = ((rows - cy) * (rows - cy)).unsqueeze(1) + ((cols - cx) * (cols - cx)).unsqueeze(0)
+    dist_mat = torch.sqrt(dist_mat)
+    return dist_mat
+
+def get_local_maps(img, sr, sl):
+
     c, h, w = img.shape
-    out = torch.zeros_like(img)
     cy, cx = (h-1) / 2.0, (w-1) / 2.0
-    for i in range(h):
-        for j in range(w):
-            if mask[0][i][j]:
-                alpha = math.atan2(i-cy, j-cx)
-                dist = math.sqrt((i-cy)*(i-cy) + (j-cx)*(j-cx))
-                beta = alpha + angle * math.pi / 180.0
-                ny = cy + dist * math.sin(beta)
-                nx = cx + dist * math.cos(beta)
-                nyl, nxl = math.floor(ny), math.floor(nx)
-                nyr, nxr = nyl + 1, nxl + 1
-                for k in range(c):
-                    out[k][i][j] = img[k][nyl][nxl] * (1.0 - (ny-nyl)) * (1.0 - (nx-nxl)) + \
-                                   img[k][nyl][nxr] * (1.0 - (ny-nyl)) * (1.0 - (nxr-nx)) + \
-                                   img[k][nyr][nxl] * (1.0 - (nyr-ny)) * (1.0 - (nx-nxl)) + \
-                                   img[k][nyr][nxr] * (1.0 - (nyr-ny)) * (1.0 - (nxr-nx))
-    return out
+
+    map_maxv = img.clone().detach()
+    map_maxv[:, :-1, :] = torch.max(map_maxv[:, :-1, :], img[:, 1:, :])
+    map_maxv[:, :, :-1] = torch.max(map_maxv[:, :, :-1], img[:, :, 1:])
+    map_maxv[:, :-1, :-1] = torch.max(map_maxv[:, :-1, :-1], img[:, 1:, 1:])
+    map_minv = img.clone().detach()
+    map_minv[:, :-1, :] = torch.min(map_minv[:, :-1, :], img[:, 1:, :])
+    map_minv[:, :, :-1] = torch.min(map_minv[:, :, :-1], img[:, :, 1:])
+    map_minv[:, :-1, :-1] = torch.min(map_minv[:, :-1, :-1], img[:, 1:, 1:])
+    map_maxd = map_maxv - map_minv
+
+    rows = torch.linspace(0.0, h - 1, steps=h)
+    cols = torch.linspace(0.0, w - 1, steps=w)
+    nyrs = (rows - cy) / sr + cy
+    nxrs = (cols - cx) / sr + cx
+    nyr_mat = nyrs.unsqueeze(1).repeat(1, w)
+    nxr_mat = nxrs.repeat(h, 1)
+    nyls = (rows - cy) / sl + cy
+    nxls = (cols - cx) / sl + cx
+    nyl_mat = nyls.unsqueeze(1).repeat(1, w)
+    nxl_mat = nxls.repeat(h, 1)
+
+    maxvr = torch.zeros_like(img)
+    maxvr[(nyrs >= 0) * (nyrs < h)][(nxrs >= 0) * (nxrs < w)] = ...
+    # TODO
 
 
-def get_lipschitz_bound(canopy, mask):
-    c, h, w = canopy.shape
-    ans = 0
-    cy, cx = (h-1) / 2.0, (w-1) / 2.0
-    for i in range(h):
-        for j in range(w):
-            if mask[0][i][j]:
-                dist = math.sqrt((i-cy)*(i-cy) + (j-cx)*(j-cx))
-                ans += 2.0 * math.sqrt(2) * dist * c
-    # rad to deg
-    ans = ans * math.pi / 180.0
-    return ans
-
-# based on 2 \sqrt 2 maxV maxD L
 def get_finer_lipschitz_bound(img, mask, anglel, angler):
 
     c, h, w = img.shape
@@ -169,15 +173,16 @@ def get_finer_lipschitz_bound(img, mask, anglel, angler):
     return ans
 
 
-parser = argparse.ArgumentParser(description='Strict rotation certify')
+parser = argparse.ArgumentParser(description='Strict resize lipschitz certify')
 parser.add_argument("dataset", choices=DATASETS, help="which dataset")
 parser.add_argument("aliasfile", type=str, help='output of alias data')
+parser.add_argument("sl", type=float, help="minimum scale ratio")
+parser.add_argument("sr", type=float, help="maximum scale ratio")
 parser.add_argument("--skip", type=int, default=1, help="how many examples to skip")
 parser.add_argument("--max", type=int, default=-1, help="stop after this many examples")
 parser.add_argument("--split", choices=["train", "test"], default="test", help="train or test set")
 parser.add_argument("--slice", type=int, default=1000, help="number of angle slices")
 parser.add_argument("--subslice", type=int, default=500, help="number of subslices for maximum l2 estimation")
-parser.add_argument("--partial", type=float, default=180.0, help="only contain +-angle maximum aliasing")
 parser.add_argument("--verbstep", type=int, default=100, help="print for how many subslices")
 args = parser.parse_args()
 
@@ -186,7 +191,7 @@ if __name__ == '__main__':
     dataset = get_dataset(args.dataset, args.split)
 
     # init transformers
-    rotationT = RotationTransformer(dataset[0][0])
+    resizer = ResizeTransformer(args.sl, args.sr)
 
     if not os.path.exists(os.path.dirname(args.aliasfile)):
         os.makedirs(os.path.dirname(args.aliasfile))
@@ -194,6 +199,11 @@ if __name__ == '__main__':
     print('no.\tmaxl2sqr', file=f, flush=True)
 
     before_time = time()
+
+    gbl_k = (1.0 / args.sl - 1.0 / args.sr) / (args.slice - 1)
+    gbl_c = float(args.slice - 1) / (args.sr / args.sl - 1.0)
+
+    dist_map = calc_dist_map(dataset[0][0])
 
     for i in range(len(dataset)):
 
@@ -208,32 +218,33 @@ if __name__ == '__main__':
         print('working on #', i)
 
         global_max_aliasing = 0.0
-        d = 360.0 / (args.slice * args.subslice)
         for j in range(args.slice):
+
+            local_sr = 1.0 / (gbl_k * (gbl_c + j - 1))
+            local_sl = 1.0 / (gbl_k * (gbl_c + j))
+
+            local_k = (1.0 / local_sl - 1.0 / local_sr) / (args.subslice - 1)
+            local_c = float(args.subslice - 1) / (local_sr / local_sl - 1.0)
+
             max_aliasing = 0.0
 
-            base_ang = 360.0 * j / args.slice
+            base_img = resizer.resizer.proc(x, local_sr)
 
-            if 360.0 * j / args.slice > args.partial and 360.0 - 360.0 * (j + 1) / args.slice > args.partial:
-                continue
+            max_v_map, max_d_map = get_local_maps(x, local_sr, local_sl)
 
-            base_img = rotationT.rotation_adder.proc(x, base_ang)
-            L = get_finer_lipschitz_bound(x, rotationT.rotation_adder.mask, base_ang, base_ang + 360.0 / args.slice)
-
-            ang_l = base_ang
-            x_k_l = rotationT.rotation_adder.proc(x, ang_l)
-            alias_k_l = torch.sum((x_k_l - base_img) * (x_k_l - base_img))
+            s_r = local_sr
+            alias_k_r = 0.0
 
             for k in range(args.subslice):
-                ang_r = base_ang + (k+1) * d
-                x_k_r = rotationT.rotation_adder.proc(x, ang_r)
-                alias_k_r = torch.sum((x_k_r - base_img) * (x_k_r - base_img))
+                s_l = 1.00 / (local_k * (local_c + k + 1))
 
-                now_max_alias = (alias_k_l + alias_k_r) / 2.0 + (d * L) / 2.0
+                x_k_l = resizer.resizer.proc(x, s_l)
+                alias_k_l = torch.sum((x_k_l - base_img) * (x_k_l - base_img))
+
+                now_max_alias = (alias_k_l + alias_k_r) / 2.0 + (2.0 * math.sqrt(2) * torch.sum(max_v_map * max_d_map * dist_map * local_k)) / 2.0
                 max_aliasing = max(now_max_alias.item(), max_aliasing)
 
-                ang_l = ang_r
-                x_k_l = x_k_r
+                s_r = s_l
                 alias_k_l = alias_k_r
 
             global_max_aliasing = max(global_max_aliasing, max_aliasing)
@@ -244,17 +255,5 @@ if __name__ == '__main__':
         print(f'{i}\t{global_max_aliasing}', file=f, flush=True)
 
     f.close()
-
-    # # debug: compare manual rotation and library rotation
-    # # now they are totally equal, means the library rotation is truly bi-linear
-    # for i in range(10):
-    #     img = dataset[i][0]
-    #     angle = rotationT.rotation_adder.gen_param()
-    #     my_out = rotate(img, angle, rotationT.rotation_adder.mask)
-    #     my_out = rotationT.rotation_adder.masking(my_out)
-    #     lib_out = rotationT.rotation_adder.proc(img, angle)
-    #     print(i, angle, torch.sum((my_out - lib_out) * (my_out - lib_out)))
-    #     visualize(my_out, f'test/test/transform/{args.dataset}/{args.split}/manual-rotation/{i}-{int(angle)}-man.bmp')
-    #     visualize(lib_out, f'test/test/transform/{args.dataset}/{args.split}/manual-rotation/{i}-{int(angle)}-lib.bmp')
 
 

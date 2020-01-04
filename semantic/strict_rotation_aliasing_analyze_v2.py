@@ -84,15 +84,15 @@ def get_finer_lipschitz_bound(img, mask, anglel, angler):
     #         map_nb_maxv[:, i, j] = map_maxv[:, max(i-1,0): min(i+2,h), max(j-1,0): min(j+2,w)].max(dim=2)[0].max(dim=1)[0]
     #         map_nb_maxd[:, i, j] = map_maxd[:, max(i-1,0): min(i+2,h), max(j-1,0): min(j+2,w)].max(dim=2)[0].max(dim=1)[0]
 
-    map_nb_maxv = map_maxv.clone().detach()
-    map_nb_maxv[:, :-1, :-1] = torch.max(map_nb_maxv[:, :-1, :-1], map_maxv[:, 1:, 1:])
-    map_nb_maxv[:, :-1, :] = torch.max(map_nb_maxv[:, :-1, :], map_maxv[:, 1:, :])
-    map_nb_maxv[:, :-1, 1:] = torch.max(map_nb_maxv[:, :-1, 1:], map_maxv[:, 1:, :-1])
-    map_nb_maxv[:, :, :-1] = torch.max(map_nb_maxv[:, :, :-1], map_maxv[:, :, 1:])
-    map_nb_maxv[:, :, 1:] = torch.max(map_nb_maxv[:, :, 1:], map_maxv[:, :, :-1])
-    map_nb_maxv[:, 1:, :-1] = torch.max(map_nb_maxv[:, 1:, :-1], map_maxv[:, :-1, 1:])
-    map_nb_maxv[:, 1:, :] = torch.max(map_nb_maxv[:, 1:, :], map_maxv[:, :-1, :])
-    map_nb_maxv[:, 1:, 1:] = torch.max(map_nb_maxv[:, 1:, 1:], map_maxv[:, :-1, :-1])
+    # map_nb_maxv = map_maxv.clone().detach()
+    # map_nb_maxv[:, :-1, :-1] = torch.max(map_nb_maxv[:, :-1, :-1], map_maxv[:, 1:, 1:])
+    # map_nb_maxv[:, :-1, :] = torch.max(map_nb_maxv[:, :-1, :], map_maxv[:, 1:, :])
+    # map_nb_maxv[:, :-1, 1:] = torch.max(map_nb_maxv[:, :-1, 1:], map_maxv[:, 1:, :-1])
+    # map_nb_maxv[:, :, :-1] = torch.max(map_nb_maxv[:, :, :-1], map_maxv[:, :, 1:])
+    # map_nb_maxv[:, :, 1:] = torch.max(map_nb_maxv[:, :, 1:], map_maxv[:, :, :-1])
+    # map_nb_maxv[:, 1:, :-1] = torch.max(map_nb_maxv[:, 1:, :-1], map_maxv[:, :-1, 1:])
+    # map_nb_maxv[:, 1:, :] = torch.max(map_nb_maxv[:, 1:, :], map_maxv[:, :-1, :])
+    # map_nb_maxv[:, 1:, 1:] = torch.max(map_nb_maxv[:, 1:, 1:], map_maxv[:, :-1, :-1])
 
     map_nb_maxd = map_maxd.clone().detach()
     map_nb_maxd[:, :-1, :-1] = torch.max(map_nb_maxd[:, :-1, :-1], map_maxd[:, 1:, 1:])
@@ -153,20 +153,20 @@ def get_finer_lipschitz_bound(img, mask, anglel, angler):
     torch.clamp_(nxr_mat, min=0, max=w-1)
 
     nyl_cell, nxl_cell, nyr_cell, nxr_cell = torch.flatten(nyl_mat), torch.flatten(nxl_mat), torch.flatten(nyr_mat), torch.flatten(nxr_mat)
-    maxv_pl_mat = torch.gather(torch.index_select(map_nb_maxv, dim=1, index=nyl_cell), dim=2, index=nxl_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-    maxv_pr_mat = torch.gather(torch.index_select(map_nb_maxv, dim=1, index=nyr_cell), dim=2, index=nxr_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+    # maxv_pl_mat = torch.gather(torch.index_select(map_nb_maxv, dim=1, index=nyl_cell), dim=2, index=nxl_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+    # maxv_pr_mat = torch.gather(torch.index_select(map_nb_maxv, dim=1, index=nyr_cell), dim=2, index=nxr_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
     maxd_pl_mat = torch.gather(torch.index_select(map_nb_maxd, dim=1, index=nyl_cell), dim=2, index=nxl_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
     maxd_pr_mat = torch.gather(torch.index_select(map_nb_maxd, dim=1, index=nyr_cell), dim=2, index=nxr_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
 
-    p_v = (torch.max(maxv_pl_mat, maxv_pr_mat) * torch.max(maxd_pl_mat, maxd_pr_mat)).sum(dim=0) * dist_mat * mask
-    ans += torch.sum(p_v)
+    # p_v = (torch.max(maxv_pl_mat, maxv_pr_mat) * torch.max(maxd_pl_mat, maxd_pr_mat)).sum(dim=0) * dist_mat * mask
+    # ans += torch.sum(p_v)
 
     # discrepancy check
     # print(torch.sum(torch.abs(t_v - p_v)))
 
     # rad to deg
-    ans = ans * 2.0 * math.sqrt(2) * math.pi / 180.0
-    return ans
+    # ans = ans * 2.0 * math.sqrt(2) * math.pi / 180.0
+    return None, torch.max(maxd_pl_mat, maxd_pr_mat), dist_mat
 
 
 parser = argparse.ArgumentParser(description='Strict rotation certify')
@@ -209,6 +209,7 @@ if __name__ == '__main__':
 
         global_max_aliasing = 0.0
         d = 360.0 / (args.slice * args.subslice)
+        radd = math.pi / (args.slice * args.subslice)
         for j in range(args.slice):
             max_aliasing = 0.0
 
@@ -218,19 +219,31 @@ if __name__ == '__main__':
                 continue
 
             base_img = rotationT.rotation_adder.proc(x, base_ang)
-            L = get_finer_lipschitz_bound(x, rotationT.rotation_adder.mask, base_ang, base_ang + 360.0 / args.slice)
+            _, max_d_map, dist_mat = get_finer_lipschitz_bound(x, rotationT.rotation_adder.mask, base_ang, base_ang + 360.0 / args.slice)
+
+            max_d2_sum = torch.sum(max_d_map * max_d_map)
 
             ang_l = base_ang
             x_k_l = rotationT.rotation_adder.proc(x, ang_l)
             alias_k_l = torch.sum((x_k_l - base_img) * (x_k_l - base_img))
+
+            term_A = 2.0 * radd * radd * torch.sum(dist_mat * dist_mat * max_d_map * max_d_map * rotationT.rotation_adder.mask)
+            interm_mat = dist_mat * max_d_map * rotationT.rotation_adder.mask
 
             for k in range(args.subslice):
                 ang_r = base_ang + (k+1) * d
                 x_k_r = rotationT.rotation_adder.proc(x, ang_r)
                 alias_k_r = torch.sum((x_k_r - base_img) * (x_k_r - base_img))
 
-                now_max_alias = (alias_k_l + alias_k_r) / 2.0 + (d * L) / 2.0
-                max_aliasing = max(now_max_alias.item(), max_aliasing)
+                # now_max_alias = (alias_k_l + alias_k_r) / 2.0 + (d * L) / 2.0
+
+                now_max_alias_new = term_A + \
+                                    max(2.0 * math.sqrt(2) * radd * torch.sum(interm_mat * x_k_l) + alias_k_l,
+                                        2.0 * math.sqrt(2) * radd * torch.sum(interm_mat * x_k_r) + alias_k_r)
+                # print(now_max_alias, now_max_alias_new)
+                # print(now_max_alias_new)
+
+                max_aliasing = max(now_max_alias_new.item(), max_aliasing)
 
                 ang_l = ang_r
                 x_k_l = x_k_r
@@ -256,5 +269,3 @@ if __name__ == '__main__':
     #     print(i, angle, torch.sum((my_out - lib_out) * (my_out - lib_out)))
     #     visualize(my_out, f'test/test/transform/{args.dataset}/{args.split}/manual-rotation/{i}-{int(angle)}-man.bmp')
     #     visualize(lib_out, f'test/test/transform/{args.dataset}/{args.split}/manual-rotation/{i}-{int(angle)}-lib.bmp')
-
-

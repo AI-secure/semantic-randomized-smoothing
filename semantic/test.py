@@ -30,7 +30,7 @@ if __name__ == '__main__':
     translationT = transforms.Translational(canopy, sigma=5.0)
     brightnessShiftT = transforms.BrightnessShift(sigma=0.1)
     brightnessScaleT = transforms.BrightnessScale(sigma=0.1)
-    sizeScaleT = transforms.Resize(sl=0.5, sr=5.0)
+    sizeScaleT = transforms.Resize(canopy, sl=0.5, sr=5.0)
 
     repeat_n = 10
 
@@ -60,7 +60,7 @@ if __name__ == '__main__':
                 #     transforms.visualize(scales[k], f'{args.outdir}/{args.dataset}/{set_name}/brightnessScale/{j}/{k}.bmp')
                 sscales = torch.zeros_like(input_rep)
                 for k in range(sscales.shape[0]):
-                    sscales[k] = sizeScaleT.proc(input_rep[k], 0.5 + 0.1 * k)
+                    sscales[k] = sizeScaleT.proc(input_rep[k], 5.0 / (k + 1))
                     transforms.visualize(sscales[k], f'{args.outdir}/{args.dataset}/{set_name}/resize/{j}/{k}.bmp')
 
             break

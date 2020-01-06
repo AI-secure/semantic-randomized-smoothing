@@ -139,42 +139,51 @@ class BrightnessScale:
 
 class Resize:
 
-    def __init__(self, sl, sr):
+    def __init__(self, canopy, sl, sr):
         self.sl, self.sr = sl, sr
+        self.c, self.h, self.w = canopy.shape
+        self.rows = torch.linspace(0.0, self.h - 1, steps=self.h)
+        self.cols = torch.linspace(0.0, self.w - 1, steps=self.w)
+
 
     def gen_param(self):
         return random.uniform(self.sl, self.sr)
 
     def proc(self, input, s):
-        c, h, w = input.shape
+        c, h, w = self.c, self.h, self.w
         cy, cx = float(h - 1) / 2.0, float(w - 1) / 2.0
-        rows = torch.linspace(0.0, h - 1, steps=h)
-        cols = torch.linspace(0.0, w - 1, steps=w)
-        nys = (rows - cy) / s + cy
-        nxs = (cols - cx) / s + cx
-        ny_mat = nys.unsqueeze(1).repeat(1, w)
-        nx_mat = nxs.repeat(h, 1)
-        nyl_mat, nxl_mat = torch.floor(ny_mat), torch.floor(nx_mat)
-        nyr_mat, nxr_mat = nyl_mat + 1, nxl_mat + 1
+        nys = (self.rows - cy) / s + cy
+        nxs = (self.cols - cx) / s + cx
 
-        nyl_mat.clamp_(min=0, max=h-1)
-        nyr_mat.clamp_(min=0, max=h-1)
-        nxl_mat.clamp_(min=0, max=w-1)
-        nxr_mat.clamp_(min=0, max=w-1)
+        nysl, nxsl = torch.floor(nys), torch.floor(nxs)
+        nysr, nxsr = nysl + 1, nxsl + 1
+
+        nysl = nysl.clamp(min=0, max=h-1).type(torch.LongTensor)
+        nxsl = nxsl.clamp(min=0, max=w-1).type(torch.LongTensor)
+        nysr = nysr.clamp(min=0, max=h-1).type(torch.LongTensor)
+        nxsr = nxsr.clamp(min=0, max=w-1).type(torch.LongTensor)
+
+        nyl_mat, nyr_mat, ny_mat = nysl.unsqueeze(1).repeat(1, w), nysr.unsqueeze(1).repeat(1, w), nys.unsqueeze(1).repeat(1, w)
+        nxl_mat, nxr_mat, nx_mat = nxsl.repeat(h, 1), nxsr.repeat(h, 1), nxs.repeat(h, 1)
+
+        nyl_arr, nyr_arr, nxl_arr, nxr_arr = nyl_mat.flatten(), nyr_mat.flatten(), nxl_mat.flatten(), nxr_mat.flatten()
 
         imgymin = max(math.ceil((1 - s) * cy), 0)
         imgymax = min(math.floor((1 - s) * cy + s * (h - 1)), h - 1)
         imgxmin = max(math.ceil((1 - s) * cx), 0)
         imgxmax = min(math.floor((1 - s) * cx + s * (h - 1)), w - 1)
 
-        Pll = torch.gather(torch.index_select(input, dim=1, index=nyl_mat.flatten().type(torch.LongTensor)), dim=2,
-                           index=nxl_mat.flatten().type(torch.LongTensor).repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-        Plr = torch.gather(torch.index_select(input, dim=1, index=nyl_mat.flatten().type(torch.LongTensor)), dim=2,
-                           index=nxr_mat.flatten().type(torch.LongTensor).repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-        Prl = torch.gather(torch.index_select(input, dim=1, index=nyr_mat.flatten().type(torch.LongTensor)), dim=2,
-                           index=nxl_mat.flatten().type(torch.LongTensor).repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-        Prr = torch.gather(torch.index_select(input, dim=1, index=nyr_mat.flatten().type(torch.LongTensor)), dim=2,
-                           index=nxr_mat.flatten().type(torch.LongTensor).repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        Pll = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
+                           index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        Plr = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
+                           index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        Prl = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
+                           index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        Prr = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
+                           index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+
+        nxl_mat, nyl_mat = nxl_mat.type(torch.FloatTensor), nyl_mat.type(torch.FloatTensor)
+
         out = torch.zeros_like(input)
         out[:, imgymin: imgymax + 1, imgxmin: imgxmax + 1] = (
             (ny_mat - nyl_mat) * (nx_mat - nxl_mat) * Prr +

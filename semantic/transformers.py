@@ -137,10 +137,10 @@ class BrightnessTransformer(AbstractTransformer):
 
 class ResizeTransformer(AbstractTransformer):
 
-    def __init__(self, sl, sr):
+    def __init__(self, canopy, sl, sr):
         super(ResizeTransformer, self).__init__()
         self.sl, self.sr = sl, sr
-        self.resizer = transforms.Resize(self.sl, self.sr)
+        self.resizer = transforms.Resize(canopy, self.sl, self.sr)
 
     def process(self, inputs):
         outs = self.resizer.batch_proc(inputs)

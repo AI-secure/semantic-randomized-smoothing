@@ -15,6 +15,11 @@ from semantic.transformers import RotationTransformer
 from semantic.transforms import visualize
 
 
+def diff(a, b):
+    dif = torch.sum(torch.abs(a - b))
+    print('diff:', dif)
+    return diff
+
 def rotate(img, angle, mask):
     c, h, w = img.shape
     out = torch.zeros_like(img)
@@ -153,10 +158,21 @@ def get_finer_lipschitz_bound(img, mask, anglel, angler):
     torch.clamp_(nxr_mat, min=0, max=w-1)
 
     nyl_cell, nxl_cell, nyr_cell, nxr_cell = torch.flatten(nyl_mat), torch.flatten(nxl_mat), torch.flatten(nyr_mat), torch.flatten(nxr_mat)
-    maxv_pl_mat = torch.gather(torch.index_select(map_nb_maxv, dim=1, index=nyl_cell), dim=2, index=nxl_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-    maxv_pr_mat = torch.gather(torch.index_select(map_nb_maxv, dim=1, index=nyr_cell), dim=2, index=nxr_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-    maxd_pl_mat = torch.gather(torch.index_select(map_nb_maxd, dim=1, index=nyl_cell), dim=2, index=nxl_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-    maxd_pr_mat = torch.gather(torch.index_select(map_nb_maxd, dim=1, index=nyr_cell), dim=2, index=nxr_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+    maxv_pl_mat = torch.gather(map_nb_maxv.reshape(c, h * w), dim=1, index=(nyl_cell * w + nxl_cell).repeat(c, 1)).reshape(c, h, w)
+    maxv_pr_mat = torch.gather(map_nb_maxv.reshape(c, h * w), dim=1, index=(nyr_cell * w + nxr_cell).repeat(c, 1)).reshape(c, h, w)
+    maxd_pl_mat = torch.gather(map_nb_maxd.reshape(c, h * w), dim=1, index=(nyl_cell * w + nxl_cell).repeat(c, 1)).reshape(c, h, w)
+    maxd_pr_mat = torch.gather(map_nb_maxd.reshape(c, h * w), dim=1, index=(nyr_cell * w + nxr_cell).repeat(c, 1)).reshape(c, h, w)
+
+    # maxv_pl_mat_old = torch.gather(torch.index_select(map_nb_maxv, dim=1, index=nyl_cell), dim=2, index=nxl_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+    # maxv_pr_mat_old = torch.gather(torch.index_select(map_nb_maxv, dim=1, index=nyr_cell), dim=2, index=nxr_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+    # maxd_pl_mat_old = torch.gather(torch.index_select(map_nb_maxd, dim=1, index=nyl_cell), dim=2, index=nxl_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+    # maxd_pr_mat_old = torch.gather(torch.index_select(map_nb_maxd, dim=1, index=nyr_cell), dim=2, index=nxr_cell.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+    # # maxv_pl_mat, maxv_pr_mat, maxd_pl_mat, maxd_pr_mat = maxv_pl_mat_old, maxv_pr_mat_old, maxd_pl_mat_old, maxd_pr_mat_old
+    #
+    # diff(maxv_pl_mat, maxv_pl_mat_old)
+    # diff(maxv_pr_mat, maxv_pr_mat_old)
+    # diff(maxd_pl_mat, maxd_pl_mat_old)
+    # diff(maxd_pr_mat, maxd_pr_mat_old)
 
     p_v = (torch.max(maxv_pl_mat, maxv_pr_mat) * torch.max(maxd_pl_mat, maxd_pr_mat)).sum(dim=0) * dist_mat * mask
     ans += torch.sum(p_v)

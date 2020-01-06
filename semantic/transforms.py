@@ -7,6 +7,7 @@ import torchvision
 import PIL.Image
 from torchvision.transforms import *
 import torchvision.transforms.functional as TF
+# import cv2
 
 class Noise:
     def __init__(self, sigma):
@@ -150,6 +151,7 @@ class Resize:
         return random.uniform(self.sl, self.sr)
 
     def proc(self, input, s):
+
         c, h, w = self.c, self.h, self.w
         cy, cx = float(h - 1) / 2.0, float(w - 1) / 2.0
         nys = (self.rows - cy) / s + cy
@@ -173,14 +175,24 @@ class Resize:
         imgxmin = max(math.ceil((1 - s) * cx), 0)
         imgxmax = min(math.floor((1 - s) * cx + s * (h - 1)), w - 1)
 
-        Pll = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
-                           index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-        Plr = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
-                           index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-        Prl = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
-                           index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-        Prr = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
-                           index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        # Pll_old = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
+        #                        index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        # Plr_old = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
+        #                        index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        # Prl_old = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
+        #                        index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+        # Prr_old = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
+        #                        index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+
+        Pll = torch.gather(input.reshape(c, h * w), dim=1, index=(nxl_arr + nyl_arr * w).repeat(c, 1)).reshape(c, h, w)
+        Plr = torch.gather(input.reshape(c, h * w), dim=1, index=(nxr_arr + nyl_arr * w).repeat(c, 1)).reshape(c, h, w)
+        Prl = torch.gather(input.reshape(c, h * w), dim=1, index=(nxl_arr + nyr_arr * w).repeat(c, 1)).reshape(c, h, w)
+        Prr = torch.gather(input.reshape(c, h * w), dim=1, index=(nxr_arr + nyr_arr * w).repeat(c, 1)).reshape(c, h, w)
+
+        # print(torch.sum(torch.abs(Pll - Pll_old)))
+        # print(torch.sum(torch.abs(Plr - Plr_old)))
+        # print(torch.sum(torch.abs(Prl - Prl_old)))
+        # print(torch.sum(torch.abs(Prr - Prr_old)))
 
         nxl_mat, nyl_mat = nxl_mat.type(torch.FloatTensor), nyl_mat.type(torch.FloatTensor)
 

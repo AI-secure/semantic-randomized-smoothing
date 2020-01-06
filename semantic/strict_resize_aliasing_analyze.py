@@ -18,6 +18,11 @@ from semantic.transforms import visualize
 
 EPS = 1e-5
 
+def diff(a, b):
+    dif = torch.sum(torch.abs(a - b))
+    print('diff:', dif)
+    return diff
+
 def calc_dist_map(canopy):
     _, h, w = canopy.shape
     cy, cx = (h - 1.0) / 2.0, (w - 1.0) / 2.0
@@ -94,13 +99,27 @@ def get_local_maps(img, sr, sl):
     # jr = min(math.floor(sr * w + cx * (1.0 - sr)), w-1)
 
     maxv_sr_mat = torch.zeros_like(img)
-    maxv_sr_mat[:, il: ir+1, jl: jr+1] = torch.gather(
-        torch.index_select(map_maxv, dim=1, index=nyr_mat[il: ir + 1, jl: jr + 1].flatten()),
-        dim=2, index=nxr_mat[il: ir + 1, jl: jr + 1].flatten().repeat(c, 1).unsqueeze(2)).reshape(c, ir-il+1, jr-jl+1)
+    maxv_sr_mat[:, il: ir+1, jl: jr+1] = torch.gather(map_maxv.reshape(c, (h+1) * (w+1)), dim=1,
+                                                      index=(nyr_mat[il: ir + 1, jl: jr + 1] * (w+1) + nxr_mat[il: ir + 1, jl: jr + 1])
+                                                      .flatten().repeat(c, 1)).reshape(c, ir-il+1, jr-jl+1)
+
     maxd_sr_mat = torch.zeros_like(img)
-    maxd_sr_mat[:, il: ir+1, jl: jr+1] = torch.gather(
-        torch.index_select(map_maxd, dim=1, index=nyr_mat[il: ir + 1, jl: jr + 1].flatten()),
-        dim=2, index=nxr_mat[il: ir + 1, jl: jr + 1].flatten().repeat(c, 1).unsqueeze(2)).reshape(c, ir-il+1, jr-jl+1)
+    maxd_sr_mat[:, il: ir+1, jl: jr+1] = torch.gather(map_maxd.reshape(c, (h+1) * (w+1)), dim=1,
+                                                      index=(nyr_mat[il: ir + 1, jl: jr + 1] * (w+1) + nxr_mat[il: ir + 1, jl: jr + 1])
+                                                      .flatten().repeat(c, 1)).reshape(c, ir-il+1, jr-jl+1)
+
+
+    # maxv_sr_mat_old = torch.zeros_like(img)
+    # maxv_sr_mat_old[:, il: ir+1, jl: jr+1] = torch.gather(
+    #     torch.index_select(map_maxv, dim=1, index=nyr_mat[il: ir + 1, jl: jr + 1].flatten()),
+    #     dim=2, index=nxr_mat[il: ir + 1, jl: jr + 1].flatten().repeat(c, 1).unsqueeze(2)).reshape(c, ir-il+1, jr-jl+1)
+    # maxd_sr_mat_old = torch.zeros_like(img)
+    # maxd_sr_mat_old[:, il: ir+1, jl: jr+1] = torch.gather(
+    #     torch.index_select(map_maxd, dim=1, index=nyr_mat[il: ir + 1, jl: jr + 1].flatten()),
+    #     dim=2, index=nxr_mat[il: ir + 1, jl: jr + 1].flatten().repeat(c, 1).unsqueeze(2)).reshape(c, ir-il+1, jr-jl+1)
+    #
+    # diff(maxv_sr_mat, maxv_sr_mat_old)
+    # diff(maxd_sr_mat, maxd_sr_mat_old)
 
     # handling sl
     il = max(math.ceil(cy * (1.0 - sl)), 0)
@@ -112,14 +131,28 @@ def get_local_maps(img, sr, sl):
     # jl = max(math.floor(-sl + cx * (1.0 - sl)) + 1, 0)
     # jr = min(math.floor(sl * w + cx * (1.0 - sl)), w - 1)
 
+
     maxv_sl_mat = torch.zeros_like(img)
-    maxv_sl_mat[:, il: ir+1, jl: jr+1] = torch.gather(
-        torch.index_select(map_maxv, dim=1, index=nyl_mat[il: ir + 1, jl: jr + 1].flatten()),
-        dim=2, index=nxl_mat[il: ir + 1, jl: jr + 1].flatten().repeat(c, 1).unsqueeze(2)).reshape(c, ir-il+1, jr-jl+1)
+    maxv_sl_mat[:, il: ir+1, jl: jr+1] = torch.gather(map_maxv.reshape(c, (h+1) * (w+1)), dim=1,
+                                                      index=(nyl_mat[il: ir + 1, jl: jr + 1] * (w+1) + nxl_mat[il: ir + 1, jl: jr + 1])
+                                                      .flatten().repeat(c, 1)).reshape(c, ir-il+1, jr-jl+1)
+
     maxd_sl_mat = torch.zeros_like(img)
-    maxd_sl_mat[:, il: ir+1, jl: jr+1] = torch.gather(
-        torch.index_select(map_maxd, dim=1, index=nyl_mat[il: ir + 1, jl: jr + 1].flatten()),
-        dim=2, index=nxl_mat[il: ir + 1, jl: jr + 1].flatten().repeat(c, 1).unsqueeze(2)).reshape(c, ir-il+1, jr-jl+1)
+    maxd_sl_mat[:, il: ir+1, jl: jr+1] = torch.gather(map_maxd.reshape(c, (h+1) * (w+1)), dim=1,
+                                                      index=(nyl_mat[il: ir + 1, jl: jr + 1] * (w+1) + nxl_mat[il: ir + 1, jl: jr + 1])
+                                                      .flatten().repeat(c, 1)).reshape(c, ir-il+1, jr-jl+1)
+
+    # maxv_sl_mat_old = torch.zeros_like(img)
+    # maxv_sl_mat_old[:, il: ir+1, jl: jr+1] = torch.gather(
+    #     torch.index_select(map_maxv, dim=1, index=nyl_mat[il: ir + 1, jl: jr + 1].flatten()),
+    #     dim=2, index=nxl_mat[il: ir + 1, jl: jr + 1].flatten().repeat(c, 1).unsqueeze(2)).reshape(c, ir-il+1, jr-jl+1)
+    # maxd_sl_mat_old = torch.zeros_like(img)
+    # maxd_sl_mat_old[:, il: ir+1, jl: jr+1] = torch.gather(
+    #     torch.index_select(map_maxd, dim=1, index=nyl_mat[il: ir + 1, jl: jr + 1].flatten()),
+    #     dim=2, index=nxl_mat[il: ir + 1, jl: jr + 1].flatten().repeat(c, 1).unsqueeze(2)).reshape(c, ir-il+1, jr-jl+1)
+    #
+    # diff(maxv_sl_mat, maxv_sl_mat_old)
+    # diff(maxd_sl_mat, maxd_sl_mat_old)
 
     ret_maxv = torch.max(maxv_sl_mat, maxv_sr_mat)
     ret_maxd = torch.max(maxd_sl_mat, maxd_sr_mat)

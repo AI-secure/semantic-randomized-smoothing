@@ -151,6 +151,22 @@ class ResizeTransformer(AbstractTransformer):
         return 1e+99
 
 
+class ResizeNoiseTransformer(AbstractTransformer):
+
+    def __init__(self, canopy, sl, sr, sigma):
+        super(ResizeNoiseTransformer, self).__init__()
+        self.resize_adder = transforms.Resize(canopy, sl, sr)
+        self.noise_adder = transforms.Noise(sigma)
+
+    def process(self, inputs):
+        outs = self.noise_adder.batch_proc(self.resize_adder.batch_proc(inputs))
+        return outs
+
+    def calc_radius(self, pABar: float):
+        # return infinity
+        return 1e+99
+
+
 def gen_transformer(args, canopy) -> AbstractTransformer:
     if args.transtype == 'rotation-noise':
         print(f'rotation-noise with noise {args.noise_sd}')
@@ -172,5 +188,8 @@ def gen_transformer(args, canopy) -> AbstractTransformer:
     elif args.transtype == 'brightness':
         print(f'brightness with k noise {args.noise_k} and b noise {args.noise_b}')
         return BrightnessTransformer(args.noise_k, args.noise_b)
+    elif args.transtype == 'resize':
+        print(f'resize from ratio {args.sl} to {args.sr} with noise {args.noise_sd}')
+        return ResizeNoiseTransformer(canopy, args.sl, args.sr, args.noise_sd)
     else:
         raise NotImplementedError

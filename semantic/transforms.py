@@ -7,7 +7,7 @@ import torchvision
 import PIL.Image
 from torchvision.transforms import *
 import torchvision.transforms.functional as TF
-# import cv2
+import cv2
 
 class Noise:
     def __init__(self, sigma):
@@ -203,6 +203,26 @@ class Resize:
             (ny_mat - nyl_mat) * (1.0 - nx_mat + nxl_mat) * Prl +
             (1.0 - ny_mat + nyl_mat) * (1.0 - nx_mat + nxl_mat) * Pll)[:, imgymin: imgymax + 1, imgxmin: imgxmax + 1]
 
+        return out
+
+    def batch_proc(self, inputs):
+        outs = torch.zeros_like(inputs)
+        for i in range(len(inputs)):
+            outs[i] = self.proc(inputs[i], self.gen_param())
+        return outs
+
+
+class Gaussian:
+    def __init__(self, sigma):
+        self.sigma = sigma
+        self.sigma2 = sigma ** 2.0
+
+    def gen_param(self):
+        r = random.uniform(0.0, self.sigma2)
+        return r
+
+    def proc(self, input, r):
+        out = torch.from_numpy(cv2.GaussianBlur(input.numpy().transpose(1, 2, 0), (0, 0), math.sqrt(r), borderType=cv2.BORDER_REFLECT101).transpose(2, 0, 1))
         return out
 
     def batch_proc(self, inputs):

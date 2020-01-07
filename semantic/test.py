@@ -2,6 +2,7 @@
 import argparse
 from torch.utils.data import DataLoader
 import torch
+import random
 
 from datasets import DATASETS, get_dataset
 import semantic.transforms as transforms
@@ -31,6 +32,7 @@ if __name__ == '__main__':
     brightnessShiftT = transforms.BrightnessShift(sigma=0.1)
     brightnessScaleT = transforms.BrightnessScale(sigma=0.1)
     sizeScaleT = transforms.Resize(canopy, sl=0.5, sr=5.0)
+    gaussianT = transforms.Gaussian(sigma=5.0)
 
     repeat_n = 10
 
@@ -58,10 +60,19 @@ if __name__ == '__main__':
                 # scales = brightnessScaleT.batch_proc(input_rep)
                 # for k in range(scales.shape[0]):
                 #     transforms.visualize(scales[k], f'{args.outdir}/{args.dataset}/{set_name}/brightnessScale/{j}/{k}.bmp')
-                sscales = torch.zeros_like(input_rep)
-                for k in range(sscales.shape[0]):
-                    sscales[k] = sizeScaleT.proc(input_rep[k], 5.0 / (k + 1))
-                    transforms.visualize(sscales[k], f'{args.outdir}/{args.dataset}/{set_name}/resize/{j}/{k}.bmp')
+                # sscales = torch.zeros_like(input_rep)
+                # for k in range(sscales.shape[0]):
+                #     sscales[k] = sizeScaleT.proc(input_rep[k], 5.0 / (k + 1))
+                #     transforms.visualize(sscales[k], f'{args.outdir}/{args.dataset}/{set_name}/resize/{j}/{k}.bmp')
+                single_input = inputs[j]
+                for k in range(repeat_n):
+                    r1, r2 = random.uniform(1.0, 10.0), random.uniform(1.0, 10.0)
+                    img1 = gaussianT.proc(gaussianT.proc(single_input, r1), r2)
+                    img2 = gaussianT.proc(single_input, r1 + r2)
+                    transforms.visualize(img1, f'{args.outdir}/{args.dataset}/{set_name}/gaussian/{j}/{k}_1.bmp')
+                    transforms.visualize(img2, f'{args.outdir}/{args.dataset}/{set_name}/gaussian/{j}/{k}_2.bmp')
+                    print(j, k, 'diff:', torch.sum(torch.abs(img2 - img1)))
+
 
             break
 

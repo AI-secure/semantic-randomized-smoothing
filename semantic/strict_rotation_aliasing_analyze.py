@@ -10,6 +10,7 @@ from semantic.core import StrictRotationSmooth
 from time import time
 import torch
 import datetime
+import setproctitle
 from architectures import get_architecture
 from semantic.transformers import RotationTransformer
 from semantic.transforms import visualize
@@ -188,8 +189,9 @@ def get_finer_lipschitz_bound(img, mask, anglel, angler):
 parser = argparse.ArgumentParser(description='Strict rotation certify')
 parser.add_argument("dataset", choices=DATASETS, help="which dataset")
 parser.add_argument("aliasfile", type=str, help='output of alias data')
-parser.add_argument("--skip", type=int, default=1, help="how many examples to skip")
+parser.add_argument("--start", type=int, default=0, help="start before skipping how many examples")
 parser.add_argument("--max", type=int, default=-1, help="stop after this many examples")
+parser.add_argument("--skip", type=int, default=1, help="how many examples to skip")
 parser.add_argument("--split", choices=["train", "test"], default="test", help="train or test set")
 parser.add_argument("--slice", type=int, default=1000, help="number of angle slices")
 parser.add_argument("--subslice", type=int, default=500, help="number of subslices for maximum l2 estimation")
@@ -204,6 +206,12 @@ if __name__ == '__main__':
     # init transformers
     rotationT = RotationTransformer(dataset[0][0])
 
+    # modify outfile name to distinguish different parts
+    if args.start != 0 or args.max != -1:
+        args.aliasfile += f'_start_{args.start}_end_{args.max}'
+
+    setproctitle.setproctitle(f'rotation_aliasing_{args.dataset}from{args.start}to{args.max}')
+
     if not os.path.exists(os.path.dirname(args.aliasfile)):
         os.makedirs(os.path.dirname(args.aliasfile))
     f = open(args.aliasfile, 'w')
@@ -212,6 +220,9 @@ if __name__ == '__main__':
     before_time = time()
 
     for i in range(len(dataset)):
+
+        if i < args.start:
+            continue
 
         # only certify every args.skip examples, and stop after args.max examples
         if i % args.skip != 0:

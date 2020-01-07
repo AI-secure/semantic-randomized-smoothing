@@ -17,7 +17,7 @@ parser.add_argument("dataset", choices=DATASETS, help="which dataset")
 parser.add_argument("base_classifier", type=str, help="path to saved pytorch model of base classifier")
 parser.add_argument("noise_sd", type=float, help="noise hyperparameter")
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
-                    choices=['rotation-noise', 'noise', 'rotation', 'translation', 'brightness'])
+                    choices=['rotation-noise', 'noise', 'rotation', 'translation', 'brightness', 'gaussian'])
 parser.add_argument("outfile", type=str, help="output file")
 parser.add_argument('--noise_k', default=0.0, type=float,
                     help="standard deviation of brightness scaling")

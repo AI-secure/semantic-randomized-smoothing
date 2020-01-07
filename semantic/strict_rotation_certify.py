@@ -9,6 +9,7 @@ from datasets import get_dataset, DATASETS, get_num_classes
 from semantic.core import StrictRotationSmooth
 from time import time
 import random
+import setproctitle
 import torch
 import datetime
 from architectures import get_architecture
@@ -22,6 +23,7 @@ parser.add_argument("noise_sd", type=float, help="noise hyperparameter")
 parser.add_argument("aliasfile", type=str, help='output of alias data')
 parser.add_argument("outfile", type=str, help="output file")
 parser.add_argument("--batch", type=int, default=1000, help="batch size")
+parser.add_argument("--start", type=int, default=0, help="start before skipping how many examples")
 parser.add_argument("--skip", type=int, default=1, help="how many examples to skip")
 parser.add_argument("--max", type=int, default=-1, help="stop after this many examples")
 parser.add_argument("--split", choices=["train", "test"], default="test", help="train or test set")
@@ -54,6 +56,12 @@ if __name__ == '__main__':
         no, v = int(no), float(v)
         alias_dic[no] = v
 
+    # modify outfile name to distinguish different parts
+    if args.start != 0 or args.max != -1:
+        args.outfile += f'_start_{args.start}_end_{args.max}'
+
+    setproctitle.setproctitle(f'rotation_certify_{args.dataset}from{args.start}to{args.max}')
+
     # prepare output file
     if not os.path.exists(os.path.dirname(args.outfile)):
         os.makedirs(os.path.dirname(args.outfile))
@@ -66,6 +74,9 @@ if __name__ == '__main__':
     tot, tot_good = 0, 0
 
     for i in range(len(dataset)):
+
+        if i < args.start:
+            continue
 
         # only certify every args.skip examples, and stop after args.max examples
         if i % args.skip != 0:
@@ -83,10 +94,12 @@ if __name__ == '__main__':
         before_time = time()
         cAHat = smoothed_classifier.guess_top(x.cuda(), args.N0, args.batch)
 
-        good = False
+        # good = False
+        clean = False
         gap = -1.0
         if cAHat == label:
-            good = True
+            # good = True
+            clean = True
             for j in range(args.slice):
                 if min(360.0 * j / args.slice, 360.0 - 360.0 * (j + 1) / args.slice) >= args.partial:
                     continue
@@ -96,16 +109,18 @@ if __name__ == '__main__':
                 prediction, gap = smoothed_classifier.certify(now_x, cAHat, args.N, args.alpha, args.batch, margin)
                 if prediction != label or gap < 0:
                     print(f'wrong @ slice #{j}')
-                    good = False
+                    # make gap always smaller than 0 for wrong slice
+                    gap = - abs(gap) - 1.0
+                    # good = False
                     break
 
         after_time = time()
         time_elapsed = str(datetime.timedelta(seconds=(after_time - before_time)))
         print("{}\t{}\t{}\t{:.3}\t{}\t{}".format(
-            i, label, cAHat, gap, good, time_elapsed), file=f, flush=True)
+            i, label, cAHat, gap, clean, time_elapsed), file=f, flush=True)
 
-        tot, tot_good = tot + 1, tot_good + good
-        print(f'{i} {good} RACC = {tot_good}/{tot} = {float(tot_good) / float(tot)}')
+        tot, tot_good = tot + 1, tot_good + (gap >= 0.0)
+        print(f'{i} {gap >= 0.0} RACC = {tot_good}/{tot} = {float(tot_good) / float(tot)}')
 
     f.close()
 

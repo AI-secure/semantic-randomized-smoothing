@@ -167,6 +167,23 @@ class ResizeNoiseTransformer(AbstractTransformer):
         return 1e+99
 
 
+class GaussianTransformer(AbstractTransformer):
+
+    def __init__(self, sigma):
+        super(GaussianTransformer, self).__init__()
+        self.gaussian_adder = transforms.Gaussian(sigma)
+
+    def process(self, inputs):
+        outs = self.gaussian_adder.batch_proc(self.gaussian_adder.batch_proc(inputs))
+        return outs
+
+    def calc_radius(self, pABar: float):
+        if pABar >= 0.5:
+            return self.gaussian_adder.sigma * math.sqrt(pABar - 0.5)
+        else:
+            return 0.0
+
+
 def gen_transformer(args, canopy) -> AbstractTransformer:
     if args.transtype == 'rotation-noise':
         print(f'rotation-noise with noise {args.noise_sd}')
@@ -191,5 +208,8 @@ def gen_transformer(args, canopy) -> AbstractTransformer:
     elif args.transtype == 'resize':
         print(f'resize from ratio {args.sl} to {args.sr} with noise {args.noise_sd}')
         return ResizeNoiseTransformer(canopy, args.sl, args.sr, args.noise_sd)
+    elif args.transtype == 'gaussian':
+        print(f'gaussian with uniform noise from 0 to {args.noise_sd}')
+        return GaussianTransformer(args.noise_sd)
     else:
         raise NotImplementedError

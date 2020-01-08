@@ -2,6 +2,7 @@
 import argparse
 from torch.utils.data import DataLoader
 import torch
+import math
 import random
 
 from datasets import DATASETS, get_dataset
@@ -12,6 +13,11 @@ parser.add_argument('dataset', type=str, choices=DATASETS)
 parser.add_argument('outdir', type=str)
 parser.add_argument('--batch', type=int, default=8)
 args = parser.parse_args()
+
+
+def diff(a, b):
+    return torch.sum((a - b) * (a - b))
+
 
 if __name__ == '__main__':
     train_dataset = get_dataset(args.dataset, 'train')
@@ -64,14 +70,14 @@ if __name__ == '__main__':
                 # for k in range(sscales.shape[0]):
                 #     sscales[k] = sizeScaleT.proc(input_rep[k], 5.0 / (k + 1))
                 #     transforms.visualize(sscales[k], f'{args.outdir}/{args.dataset}/{set_name}/resize/{j}/{k}.bmp')
-                single_input = inputs[j]
-                for k in range(repeat_n):
-                    r1, r2 = random.uniform(1.0, 10.0), random.uniform(1.0, 10.0)
-                    img1 = gaussianT.proc(gaussianT.proc(single_input, r1), r2)
-                    img2 = gaussianT.proc(single_input, r1 + r2)
-                    transforms.visualize(img1, f'{args.outdir}/{args.dataset}/{set_name}/gaussian/{j}/{k}_1.bmp')
-                    transforms.visualize(img2, f'{args.outdir}/{args.dataset}/{set_name}/gaussian/{j}/{k}_2.bmp')
-                    print(j, k, 'diff:', torch.sum(torch.abs(img2 - img1)))
+                # single_input = inputs[j]
+                # for k in range(repeat_n):
+                #     r1, r2 = random.uniform(1.0, 10.0), random.uniform(1.0, 10.0)
+                #     img1 = gaussianT.proc(gaussianT.proc(single_input, r1), r2)
+                #     img2 = gaussianT.proc(single_input, r1 + r2)
+                #     transforms.visualize(img1, f'{args.outdir}/{args.dataset}/{set_name}/gaussian/{j}/{k}_1.bmp')
+                #     transforms.visualize(img2, f'{args.outdir}/{args.dataset}/{set_name}/gaussian/{j}/{k}_2.bmp')
+                #     print(j, k, 'diff:', torch.sum(torch.abs(img2 - img1)))
 
 
             break
@@ -115,5 +121,40 @@ if __name__ == '__main__':
     #                 maximum = max(maximum, delta)
     #             mean /= repeat_n
     #             print(set_name, j, 'mean:', mean, 'maximum:', maximum)
+    #         break
+
+    # rotation correctness measuring
+    # for loader, set_name in [(train_loader, 'train'), (test_loader, 'test')]:
+    #     for i, (inputs, targets) in enumerate(loader):
+    #         # only pick the first mini-batch
+    #         for j in range(inputs.shape[0]):
+    #             for k in range(repeat_n):
+    #                 angle = rotationT.gen_param()
+    #                 orig = inputs[j]
+    #                 rotp1 = rotationT.masking(rotationT.raw_proc(orig, angle))
+    #                 rotp2 = rotationT.masking(rotationT.old_raw_proc(orig, angle))
+    #                 dif = diff(rotp1, rotp2)
+    #                 print(set_name, j, angle, dif)
+    #         break
+
+    # # rotation aliasing error in PIL library
+    # for loader, set_name in [(train_loader, 'train'), (test_loader, 'test')]:
+    #     for i, (inputs, targets) in enumerate(loader):
+    #         # only pick the first mini-batch
+    #         for j in range(inputs.shape[0]):
+    #             for k in range(repeat_n):
+    #                 angle = 1.0 / (2.0 ** k)
+    #                 orig = inputs[j]
+    #                 rotp1 = rotate(orig, angle, rotationT.mask)
+    #                 rotp2 = rotate(orig, angle * 2.0, rotationT.mask)
+    #                 orig = orig * rotationT.mask
+    #                 # rotp1 = rotationT.raw_proc(orig, angle)
+    #                 # rotp2 = rotationT.raw_proc(orig, angle * 2.0)
+    #                 # orig = rotationT.masking(orig)
+    #                 # rotp1 = rotationT.masking(rotp1)
+    #                 # rotp2 = rotationT.masking(rotp2)
+    #                 dif1 = diff(orig, rotp1)
+    #                 dif2 = diff(rotp1, rotp2)
+    #                 print(set_name, j, angle, dif1, dif2)
     #         break
 

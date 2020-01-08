@@ -63,7 +63,6 @@ def get_finer_lipschitz_bound(img, mask, anglel, angler):
     ans = 0.0
     radl, radr = anglel * math.pi / 180.0, angler * math.pi / 180.0
     cy, cx = (h-1) / 2.0, (w-1) / 2.0
-    mask_l = mask.type(torch.LongTensor)
 
     # preprocess
     # for performance, fxxk python's slow loop, have to unfold manually

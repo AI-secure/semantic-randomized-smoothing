@@ -2,8 +2,12 @@ import torch
 from torchvision.models.resnet import resnet50
 import torch.backends.cudnn as cudnn
 from archs.cifar_resnet import resnet as resnet_cifar
+from archs.fashionmnist_conv import Conv2FC2full, Conv2FC2simple
+from archs.mnist_conv import Conv4FC3
 from datasets import get_normalize_layer
 from torch.nn.functional import interpolate
+import torch.nn as nn
+
 
 # resnet50 - the classic ResNet-50, sized for ImageNet
 # cifar_resnet20 - a 20-layer residual network sized for CIFAR
@@ -24,5 +28,12 @@ def get_architecture(arch: str, dataset: str) -> torch.nn.Module:
         model = resnet_cifar(depth=20, num_classes=10).cuda()
     elif arch == "cifar_resnet110":
         model = resnet_cifar(depth=110, num_classes=10).cuda()
+    elif arch == "fashion_22full":
+        model = Conv2FC2full()
+        model = model.cuda()
+    elif arch == "fashion_22simple":
+        model = Conv2FC2simple().cuda()
+    elif arch == "mnist_43":
+        model = Conv4FC3().cuda()
     normalize_layer = get_normalize_layer(dataset)
     return torch.nn.Sequential(normalize_layer, model)

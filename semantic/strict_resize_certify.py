@@ -4,7 +4,7 @@ import math
 
 # evaluate a smoothed classifier on a dataset
 import argparse
-# import setGPU
+import setGPU
 from datasets import get_dataset, DATASETS, get_num_classes
 from semantic.core import StrictRotationSmooth
 from time import time
@@ -86,7 +86,7 @@ if __name__ == '__main__':
         # only certify every args.skip examples, and stop after args.max examples
         if i % args.skip != 0:
             continue
-        if i == args.max:
+        if i >= args.max >= 0:
             break
 
         (x, label) = dataset[i]

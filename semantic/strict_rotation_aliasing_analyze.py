@@ -226,7 +226,7 @@ if __name__ == '__main__':
         # only certify every args.skip examples, and stop after args.max examples
         if i % args.skip != 0:
             continue
-        if i == args.max:
+        if i >= args.max >= 0:
             break
 
         (x, label) = dataset[i]

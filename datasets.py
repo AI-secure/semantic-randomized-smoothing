@@ -19,6 +19,10 @@ def get_dataset(dataset: str, split: str) -> Dataset:
         return _imagenet(split)
     elif dataset == "cifar10":
         return _cifar10(split)
+    elif dataset == "mnist":
+        return _mnist(split)
+    elif dataset == "fashionmnist":
+        return _fashion_mnist(split)
 
 
 def get_num_classes(dataset: str):
@@ -35,6 +39,8 @@ def get_normalize_layer(dataset: str) -> torch.nn.Module:
         return NormalizeLayer(_IMAGENET_MEAN, _IMAGENET_STDDEV)
     elif dataset == "cifar10":
         return NormalizeLayer(_CIFAR10_MEAN, _CIFAR10_STDDEV)
+    else:
+        return NormalizeLayer(_DEFAULT_MEAN, _DEFAULT_STDDEV)
 
 
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -42,6 +48,9 @@ _IMAGENET_STDDEV = [0.229, 0.224, 0.225]
 
 _CIFAR10_MEAN = [0.4914, 0.4822, 0.4465]
 _CIFAR10_STDDEV = [0.2023, 0.1994, 0.2010]
+
+_DEFAULT_MEAN = [0.5, 0.5, 0.5]
+_DEFAULT_STDDEV = [0.5, 0.5, 0.5]
 
 
 def _cifar10(split: str) -> Dataset:
@@ -75,6 +84,23 @@ def _imagenet(split: str) -> Dataset:
             transforms.ToTensor()
         ])
     return datasets.ImageFolder(subdir, transform)
+
+
+def _mnist(split: str) -> Dataset:
+    if split == "train":
+        return datasets.MNIST("./dataset_cache", train=True, download=True, transform=transforms.ToTensor())
+    elif split == "test":
+        return datasets.MNIST("./dataset_cache", train=False, download=True, transform=transforms.ToTensor())
+
+
+def _fashion_mnist(split: str) -> Dataset:
+    if split == "train":
+        return datasets.FashionMNIST("./dataset_cache", train=True, download=True, transform=transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor()
+        ]))
+    elif split == "test":
+        return datasets.FashionMNIST("./dataset_cache", train=False, download=True, transform=transforms.ToTensor())
 
 
 class NormalizeLayer(torch.nn.Module):

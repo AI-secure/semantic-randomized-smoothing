@@ -31,4 +31,5 @@ if __name__ == '__main__':
     print(f'Output to {args.outfile}')
     f = open(args.outfile, 'w')
     print(output, file=f)
+    print(f'Clean acc: {df["correct"].sum()}/{len(df)} = {df["correct"].sum()/len(df)}')
     f.close()

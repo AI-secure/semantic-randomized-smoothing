@@ -195,10 +195,12 @@ parser.add_argument("--split", choices=["train", "test"], default="test", help="
 parser.add_argument("--slice", type=int, default=1000, help="number of angle slices")
 parser.add_argument("--subslice", type=int, default=500, help="number of subslices for maximum l2 estimation")
 parser.add_argument("--partial", type=float, default=180.0, help="only contain +-angle maximum aliasing")
-parser.add_argument("--verbstep", type=int, default=100, help="print for how many subslices")
+parser.add_argument("--verbstep", type=int, default=10, help="print for how many subslices")
 args = parser.parse_args()
 
 if __name__ == '__main__':
+    torch.set_num_threads(2)
+
     # iterate through the dataset
     dataset = get_dataset(args.dataset, args.split)
 

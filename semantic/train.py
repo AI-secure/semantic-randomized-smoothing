@@ -55,6 +55,7 @@ parser.add_argument('--gpu', default=None, type=str,
                     help='id(s) for CUDA_VISIBLE_DEVICES')
 parser.add_argument('--print_freq', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
+parser.add_argument('--pretrain', default=None, type=str)
 args = parser.parse_args()
 
 def main():
@@ -73,6 +74,12 @@ def main():
                              num_workers=args.workers, pin_memory=pin_memory)
 
     model = get_architecture(args.arch, args.dataset)
+
+    if args.pretrain is not None:
+        # load the base classifier
+        checkpoint = torch.load(args.pretrain)
+        model.load_state_dict(checkpoint['state_dict'])
+        print(f'loaded from {args.pretrain}')
 
     logfilename = os.path.join(args.outdir, 'log.txt')
     init_logfile(logfilename, "epoch\ttime\tlr\ttrain loss\ttrain acc\ttestloss\ttest acc")

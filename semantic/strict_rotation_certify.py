@@ -32,6 +32,7 @@ parser.add_argument("--N", type=int, default=100000, help="number of samples to 
 parser.add_argument("--slice", type=int, default=1000, help="number of angle slices")
 parser.add_argument("--alpha", type=float, default=0.001, help="failure probability")
 parser.add_argument("--partial", type=float, default=180.0, help="certify +-partial degrees")
+parser.add_argument("--verbstep", type=int, default=100, help="certify +-partial degrees")
 args = parser.parse_args()
 
 if __name__ == '__main__':
@@ -103,8 +104,8 @@ if __name__ == '__main__':
             for j in range(args.slice):
                 if min(360.0 * j / args.slice, 360.0 - 360.0 * (j + 1) / args.slice) >= args.partial:
                     continue
-                if j % 100 == 0:
-                    print(f"> {j}/{args.slice}")
+                if j % args.verbstep == 0:
+                    print(f"> {j}/{args.slice} {str(datetime.timedelta(seconds=(time() - before_time)))}")
                 now_x = rotationT.rotation_adder.raw_proc(x, 360.0 * j / args.slice).cuda()
                 prediction, gap = smoothed_classifier.certify(now_x, cAHat, args.N, args.alpha, args.batch, margin)
                 if prediction != label or gap < 0:

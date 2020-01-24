@@ -2,6 +2,7 @@
 import os
 import random
 import math
+import numpy as np
 import torch
 import torchvision
 import PIL.Image
@@ -138,6 +139,38 @@ class Translational:
         return outs
 
 
+class BlackTranslational(Translational):
+
+    def __init__(self, canopy, sigma):
+        super(BlackTranslational, self).__init__(canopy, sigma)
+
+    def proc(self, input, dx, dy):
+        nx, ny = round(dx), round(dy)
+        out = torch.zeros_like(input)
+        nx = nx % self.h if nx > 0 else nx % (-self.h)
+        ny = ny % self.w if ny > 0 else ny % (-self.w)
+        if nx > 0 and ny > 0:
+            out[:, :-nx, :-ny] = input[:, nx:, ny:]
+        elif nx > 0 and ny == 0:
+            out[:, :-nx, :] = input[:, nx:, :]
+        elif nx > 0 and ny < 0:
+            out[:, :-nx, -ny:] = input[:, nx:, :ny]
+        elif nx == 0 and ny > 0:
+            out[:, :, :-ny] = input[:, :, ny:]
+        elif nx == 0 and ny == 0:
+            out = input
+        elif nx == 0 and ny < 0:
+            out[:, :, -ny:] = input[:, :, :ny]
+        elif nx < 0 and ny > 0:
+            out[:, -nx:, :-ny] = input[:, :nx, ny:]
+        elif nx < 0 and ny == 0:
+            out[:, -nx:, :] = input[:, :nx, :]
+        elif nx < 0 and ny < 0:
+            out[:, -nx:, -ny:] = input[:, :nx, :ny]
+        return out
+
+
+
 class BrightnessShift:
 
     def __init__(self, sigma):
@@ -263,7 +296,10 @@ class Gaussian:
         return r
 
     def proc(self, input, r):
-        out = torch.from_numpy(cv2.GaussianBlur(input.numpy().transpose(1, 2, 0), (0, 0), math.sqrt(r), borderType=cv2.BORDER_REFLECT101).transpose(2, 0, 1))
+        out = cv2.GaussianBlur(input.numpy().transpose(1, 2, 0), (0, 0), math.sqrt(r), borderType=cv2.BORDER_REFLECT101)
+        if out.ndim == 2:
+            out = np.expand_dims(out, 2)
+        out = torch.from_numpy(out.transpose(2, 0, 1))
         return out
 
     def batch_proc(self, inputs):

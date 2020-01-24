@@ -12,6 +12,8 @@ IMAGENET_LOC_ENV = "IMAGENET_DIR"
 # os.environ[IMAGENET_LOC_ENV] = "/data/datasets/imagenet/ILSVRC2012"
 # on asedl
 os.environ[IMAGENET_LOC_ENV] = "/srv/local/data/ImageNet/ILSVRC2012_full"
+# on asedl but mount to aisecure gpu1
+# os.environ[IMAGENET_LOC_ENV] = "/home/linyi2/data_mnt/imagenet/ILSVRC2012"
 
 # list of all datasets
 DATASETS = ["imagenet", "cifar10"]

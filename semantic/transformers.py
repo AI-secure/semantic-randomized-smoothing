@@ -81,7 +81,7 @@ class RotationTransformer(AbstractTransformer):
         return outs
 
     def calc_radius(self, pABar: float):
-        # return infinity
+        # return infinity because it's invalid
         return 1e+99
 
 
@@ -99,6 +99,18 @@ class TranslationTransformer(AbstractTransformer):
     def calc_radius(self, pABar: float):
         radius = self.sigma * norm.ppf(pABar)
         return radius
+
+
+class BlackpadTranslationTransformer(TranslationTransformer):
+
+    def __init__(self, sigma, canopy):
+        super(TranslationTransformer, self).__init__()
+        self.translation_adder = transforms.BlackTranslational(canopy, sigma)
+        self.sigma = sigma
+
+    def calc_radius(self, pABar: float):
+        # return infinity because it's invalid
+        return 1e+99
 
 
 class BrightnessTransformer(AbstractTransformer):
@@ -129,10 +141,52 @@ class BrightnessTransformer(AbstractTransformer):
             pBBar = 2.0 * norm.cdf(math.exp(k / 2.0) * norm.ppf(0.5 + pABar / 2.0)) - 1.0
 
         if pBBar > 0.5:
-            margin = norm.ppf(pBBar) ** 2 - (k / self.sigma_k) ** 2
+            if self.sigma_k == 0.0 and k == 0.0:
+                margin = norm.ppf(pBBar) ** 2
+            else:
+                margin = norm.ppf(pBBar) ** 2 - (k / self.sigma_k) ** 2
             if margin > 0.0:
                 return self.sigma_b * math.sqrt(margin)
         return 0.0
+
+class ContrastTransformer(BrightnessTransformer):
+
+    def __init__(self, sigma_k, sigma_b):
+        super(ContrastTransformer, self).__init__(sigma_k, sigma_b)
+
+    def process(self, inputs):
+        outs = self.scaler.batch_proc(self.brighter.batch_proc(inputs))
+        return outs
+
+    def set_contrast_scale(self, l, r):
+        self.k_l = math.log(l)
+        self.k_r = math.log(r)
+        assert self.k_l <= 0.0 <= self.k_r
+
+    def calc_radius(self, pABar: float, EPS=1e-5):
+        if pABar <= 0.5:
+            return 0.0
+        # binary left side
+        l, r = self.k_l, 0.0
+        while r - l > EPS:
+            mid = (l + r) / 2.0
+            if self.calc_b_bound(mid, pABar) > EPS:
+                r = mid
+            else:
+                l = mid
+        k_lbound = math.exp(r)
+        # binary right side
+        l, r = 0.0, self.k_r
+        while r - l > EPS:
+            mid = (l + r) / 2.0
+            if self.calc_b_bound(mid, pABar) > EPS:
+                l = mid
+            else:
+                r = mid
+        k_rbound = math.exp(l)
+
+        print('l', k_lbound, 'r', k_rbound)
+        return min(1.0 - k_lbound, k_rbound - 1.0)
 
 
 class ResizeTransformer(AbstractTransformer):
@@ -205,11 +259,17 @@ def gen_transformer(args, canopy) -> AbstractTransformer:
     elif args.transtype == 'brightness':
         print(f'brightness with k noise {args.noise_k} and b noise {args.noise_b}')
         return BrightnessTransformer(args.noise_k, args.noise_b)
+    elif args.transtype == 'contrast':
+        print(f'contrast with k noise {args.noise_k} and b noise {args.noise_b}')
+        return ContrastTransformer(args.noise_k, args.noise_b)
     elif args.transtype == 'resize':
         print(f'resize from ratio {args.sl} to {args.sr} with noise {args.noise_sd}')
         return ResizeNoiseTransformer(canopy, args.sl, args.sr, args.noise_sd)
     elif args.transtype == 'gaussian':
         print(f'gaussian with uniform noise from 0 to {args.noise_sd}')
         return GaussianTransformer(args.noise_sd)
+    elif args.transtype == 'btranslation':
+        print(f'black-padding translation with noise {args.noise_sd}')
+        return BlackpadTranslationTransformer(args.noise_sd, canopy)
     else:
         raise NotImplementedError

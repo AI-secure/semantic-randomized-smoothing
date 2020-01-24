@@ -6,6 +6,7 @@ import os
 
 import argparse
 import torch
+import torchvision
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 from datasets import get_dataset, DATASETS
@@ -21,7 +22,7 @@ parser = argparse.ArgumentParser(description='PyTorch Training')
 parser.add_argument('dataset', type=str, choices=DATASETS)
 parser.add_argument('arch', type=str, choices=ARCHITECTURES)
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
-                    choices=['rotation-noise', 'noise', 'rotation', 'strict-rotation-noise', 'translation', 'brightness', 'resize', 'gaussian'])
+                    choices=['rotation-noise', 'noise', 'rotation', 'strict-rotation-noise', 'translation', 'brightness', 'resize', 'gaussian', 'btranslation'])
 parser.add_argument('outdir', type=str, help='folder to save model and training log)')
 parser.add_argument('--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -76,10 +77,18 @@ def main():
     model = get_architecture(args.arch, args.dataset)
 
     if args.pretrain is not None:
-        # load the base classifier
-        checkpoint = torch.load(args.pretrain)
-        model.load_state_dict(checkpoint['state_dict'])
-        print(f'loaded from {args.pretrain}')
+        if args.pretrain == 'torchvision':
+            # load pretrain model from torchvision
+            if args.dataset == 'imagenet' and args.arch == 'resnet50':
+                model = torchvision.models.resnet50(True).cuda()
+                print('loaded from torchvision for imagenet resnet50')
+            else:
+                raise Exception(f'Unsupported pretrain arg {args.pretrain}')
+        else:
+            # load the base classifier
+            checkpoint = torch.load(args.pretrain)
+            model.load_state_dict(checkpoint['state_dict'])
+            print(f'loaded from {args.pretrain}')
 
     logfilename = os.path.join(args.outdir, 'log.txt')
     init_logfile(logfilename, "epoch\ttime\tlr\ttrain loss\ttrain acc\ttestloss\ttest acc")

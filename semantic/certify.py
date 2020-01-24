@@ -8,6 +8,7 @@ from datasets import get_dataset, DATASETS, get_num_classes
 from semantic.core import SemanticSmooth
 from time import time
 import torch
+import torchvision
 import datetime
 from architectures import get_architecture
 from semantic.transformers import gen_transformer
@@ -17,7 +18,7 @@ parser.add_argument("dataset", choices=DATASETS, help="which dataset")
 parser.add_argument("base_classifier", type=str, help="path to saved pytorch model of base classifier")
 parser.add_argument("noise_sd", type=float, help="noise hyperparameter")
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
-                    choices=['rotation-noise', 'noise', 'rotation', 'translation', 'brightness', 'gaussian'])
+                    choices=['rotation-noise', 'noise', 'rotation', 'translation', 'brightness', 'contrast', 'gaussian'])
 parser.add_argument("outfile", type=str, help="output file")
 parser.add_argument('--noise_k', default=0.0, type=float,
                     help="standard deviation of brightness scaling")
@@ -38,6 +39,11 @@ if __name__ == "__main__":
     # load the base classifier
     checkpoint = torch.load(args.base_classifier)
     base_classifier = get_architecture(checkpoint["arch"], args.dataset)
+    if checkpoint["arch"] == 'resnet50' and args.dataset == "imagenet":
+        try:
+            base_classifier.load_state_dict(checkpoint['state_dict'])
+        except:
+            base_classifier = torchvision.models.resnet50(pretrained=False).cuda()
     base_classifier.load_state_dict(checkpoint['state_dict'])
 
     # prepare output file
@@ -54,6 +60,9 @@ if __name__ == "__main__":
     # special setting for brightness
     if args.transtype == 'brightness':
         transformer.set_brightness_scale(1.0 - args.bright_scale, 1.0 + args.bright_scale)
+    if args.transtype == 'contrast':
+        # binary search from 0.1 to 10.0
+        transformer.set_contrast_scale(0.1, 10.0)
 
     # create the smooothed classifier g
     smoothed_classifier = SemanticSmooth(base_classifier, get_num_classes(args.dataset), transformer)
@@ -78,6 +87,6 @@ if __name__ == "__main__":
         time_elapsed = str(datetime.timedelta(seconds=(after_time - before_time)))
         print("{}\t{}\t{}\t{:.3}\t{}\t{}".format(
             i, label, prediction, radius, correct, time_elapsed), file=f, flush=True)
-        print(i, time_elapsed)
+        print(i, time_elapsed, correct, radius)
 
     f.close()

@@ -1,7 +1,7 @@
 ## Semantic Randomized Smoothing
 ---
 
-Fork from Cohen et al's randomized smoothing code framework [(link)][https://github.com/locuslab/smoothing].
+Fork from Cohen et al's randomized smoothing code framework [(link)](https://github.com/locuslab/smoothing).
 
 We support semantic transformations including Gaussian blur, translation, brightness and contrast, rotation and scaling.
 
@@ -45,7 +45,7 @@ In the following we only list changed or new files:
   - `visualize/`:
     - `*.py`: generate the figures and tables in paper.
 
-###Raw Experiment Data Format
+### Raw Experiment Data Format
 
 Raw experiments data is stored in `data/` folder.
 
@@ -71,7 +71,7 @@ In this section we demonstrate the training and certifying usage for each transf
 
 The detail usage is revealed by the detailed parameter description of each script.
 
-####Gaussian Blur
+#### Gaussian Blur
 
 ##### Training
 
@@ -140,7 +140,7 @@ Example 2: mnist, black-padding, with Gaussian distributed (sigma=10.0) perturba
 
 
 
-#####Certify by Randomized Smoothing
+##### Certify by Randomized Smoothing
 
 Example 1: imagenet, reflection-padding, with Gaussian distributed (sigma=10.0) perturbation on both x and y axis, on default GPU
 
@@ -150,7 +150,7 @@ Example 2: mnist, reflection-padding, with Gaussian distributed (sigma=3.0) pert
 
 `~/anaconda3/bin/python semantic/certify.py mnist models/mnist/mnist_43/translation/noise_3.0/checkpoint.pth.tar 3.0 translation data/predict/mnist/mnist_43/translation/noise_3.0 --skip 20 --batch 400`
 
-#####Certify by Enumeration
+##### Certify by Enumeration
 
 Example 1: mnist, reflection-padding
 

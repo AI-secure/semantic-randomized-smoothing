@@ -1,6 +1,8 @@
 ## Semantic Randomized Smoothing
 ---
 
+*Browse our paper on [arXiv](https://arxiv.org/abs/2002.12398)!*
+
 Fork from Cohen et al's randomized smoothing code framework [(link)](https://github.com/locuslab/smoothing).
 
 We support semantic transformations including Gaussian blur, translation, brightness and contrast, rotation and scaling.

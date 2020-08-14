@@ -1,16 +1,22 @@
 
 import os
+import sys
+sys.path.append('.')
+sys.path.append('..')
+
+import os
 import math
 
 # evaluate a smoothed classifier on a dataset
 import argparse
 import setGPU
-from datasets import get_dataset, DATASETS, get_num_classes
+from datasets import get_dataset, DATASETS, get_num_classes, get_normalize_layer
 from semantic.core import StrictRotationSmooth
 from time import time
 import random
 import setproctitle
 import torch
+import torchvision
 import datetime
 from architectures import get_architecture
 from semantic.transformers import ResizeTransformer
@@ -41,6 +47,17 @@ if __name__ == '__main__':
     # load the base classifier
     checkpoint = torch.load(args.base_classifier)
     base_classifier = get_architecture(checkpoint["arch"], args.dataset)
+
+    if checkpoint["arch"] == 'resnet50' and args.dataset == "imagenet":
+        try:
+            base_classifier.load_state_dict(checkpoint['state_dict'])
+        except:
+            base_classifier = torchvision.models.resnet50(pretrained=False).cuda()
+
+            # fix
+            normalize_layer = get_normalize_layer('imagenet').cuda()
+            base_classifier = torch.nn.Sequential(normalize_layer, base_classifier)
+
     base_classifier.load_state_dict(checkpoint['state_dict'])
 
     # iterate through the dataset
@@ -57,7 +74,11 @@ if __name__ == '__main__':
     alias_dic = dict()
     f = open(args.aliasfile, 'r')
     for line in f.readlines()[1:]:
-        no, v = line.split('\t')
+        try:
+            no, v = line.split('\t')
+        except:
+            # sometimes we have the last column for time recording
+            no, v, _ = line.split('\t')
         no, v = int(no), float(v)
         alias_dic[no] = v
 
@@ -74,9 +95,9 @@ if __name__ == '__main__':
     print("idx\tlabel\tpredict\tradius\tcorrect\ttime", file=f, flush=True)
 
     # create the smooothed classifier g
-    smoothed_classifier = StrictRotationSmooth(base_classifier, get_num_classes(args.dataset), args.noise_sd)
+    smoothed_classifier = StrictRotationSmooth(base_classifier, get_num_classes(args.dataset), args.noise_sd, 0.0)
 
-    tot, tot_good = 0, 0
+    tot, tot_clean, tot_good, tot_cert = 0, 0, 0, 0
 
     for i in range(len(dataset)):
 
@@ -99,29 +120,53 @@ if __name__ == '__main__':
         before_time = time()
         cAHat = smoothed_classifier.guess_top(x.cuda(), args.N0, args.batch)
 
-        clean = False
+        clean, cert, good = (cAHat == label), None, None
         gap = -1.0
-        if cAHat == label:
-            clean = True
-            for j in range(args.slice):
-                s = min(max(1.0 / (gbl_k * (j + gbl_c)), args.sl), args.sr)
-                if j % args.verbstep == 0:
-                    print(f"> {j}/{args.slice} ratio: {s}")
-                now_x = resizeT.resizer.proc(x, s).cuda()
-                prediction, gap = smoothed_classifier.certify(now_x, cAHat, args.N, args.alpha, args.batch, margin)
-                if prediction != label or gap < 0:
-                    print(f'wrong @ slice #{j}')
-                    # make gap always smaller than 0 for wrong slice
-                    gap = - abs(gap) - 1.0
-                    break
+        # if cAHat == label:
+        #     clean = True
+        cert, good = True, True
+        for j in range(args.slice):
+            s = min(max(1.0 / (gbl_k * (j + gbl_c)), args.sl), args.sr)
+            if j % args.verbstep == 0:
+                print(f"> {j}/{args.slice} ratio: {s}")
+            now_x = resizeT.resizer.proc(x, s).cuda()
+            prediction, gap = smoothed_classifier.certify(now_x, cAHat, args.N, args.alpha, args.batch, 0.0, margin)
+
+            if prediction != cAHat or gap < 0:
+                print(prediction)
+                print(cAHat)
+                print(gap)
+                print(f'not robust @ slice #{j}')
+                good = cert = False
+                break
+            elif prediction != label:
+                # if  or gap < 0:
+                print(f'wrong @ slice #{j}')
+                # make gap always smaller than 0 for wrong slice
+                gap = - abs(gap) - 1.0
+                good = False
+                # break
+
+            # if prediction != label or gap < 0:
+            #     print(f'wrong @ slice #{j}')
+            #     # make gap always smaller than 0 for wrong slice
+            #     gap = - abs(gap) - 1.0
+            #     break
 
         after_time = time()
         time_elapsed = str(datetime.timedelta(seconds=(after_time - before_time)))
         print("{}\t{}\t{}\t{:.3}\t{}\t{}".format(
             i, label, cAHat, gap, clean, time_elapsed), file=f, flush=True)
 
-        tot, tot_good = tot + 1, tot_good + (gap >= 0.0)
-        print(f'{i} {gap >= 0.0} RACC = {tot_good}/{tot} = {float(tot_good) / float(tot)}')
+        tot, tot_clean, tot_cert, tot_good = tot + 1, tot_clean + int(clean), tot_cert + int(cert), tot_good + int(good)
+        print(f'{i} {gap >= 0.0} '
+              f'CleanACC = {tot_clean}/{tot} = {float(tot_clean) / float(tot)} '
+              f'CertAcc = {tot_cert}/{tot} = {float(tot_cert) / float(tot)} '
+              f'RACC = {tot_good}/{tot} = {float(tot_good) / float(tot)}')
+
+    print(f'CleanACC = {tot_clean}/{tot} = {float(tot_clean) / float(tot)} '
+        f'CertAcc = {tot_cert}/{tot} = {float(tot_cert) / float(tot)} '
+        f'RACC = {tot_good}/{tot} = {float(tot_good) / float(tot)}', file=f, flush=True)
 
     f.close()
 

@@ -1,0 +1,31 @@
+data_of_CertACC vs. RACC for rotation and scaling
+
+
+~/anaconda3/bin/python semantic/strict_rotation_certify.py mnist models/mnist/mnist_43/rotation/noise_0.50_r_35/checkpoint.pth.tar 0.50 data/predict/mnist/rotation_alias_stat/1000_1000_p_30 data/predict/mnist/mnist_43/rotation/noise_0.50_r_35_run2 --N 100000 --skip 20 --batch 400 --slice 1000 --partial 30
+
+CleanACC = 494/500 = 0.988 CertAcc = 479/500 = 0.958 RACC = 478/500 = 0.956
+
+~/anaconda3/bin/python semantic/strict_rotation_certify.py cifar10 models/cifar10/resnet110/strict-rotation-noise/noise_0.05_r_12.5/checkpoint.pth.tar 0.05 data/predict/cifar10/alias_stat/10000_1000_p_30 data/predict/cifar10/resnet110/strict-rotation-noise/noise_0.05_r_12.5_run2 --N 10000 --skip 20 --batch 400 --slice 10000 --partial 10
+
+cleanACC = 419/500 = 0.838 CertAcc = 331/500 = 0.662 RACC = 317/500 = 0.634
+
+~/anaconda3/bin/python semantic/strict_rotation_certify.py imagenet models/imagenet/resnet50/rotation/pretrain_noise_0.50_r_12.5/checkpoint.pth.tar 0.50 data/predict/imagenet/rotation_alias_stat/20000_1000_p_10 data/predict/imagenet/resnet50/rotation/pretrain_noise_0.50_r_12.5_run2 --N 10000 --skip 500 --batch 80 --slice 20000 --partial 10
+
+CleanACC = 57/100 = 0.57 CertAcc = 39/100 = 0.39 RACC = 33/100 = 0.33
+
+===============================
+
+~/anaconda3/bin/python semantic/strict_resize_certify.py mnist models/mnist/mnist_43/scaling/noise_0.10_p_0.25/checkpoint.pth.tar 0.8 1.2 0.10 data/predict/mnist/resize_alias_stat/0.8_1.2_1000_100 data/predict/mnist/mnist_43/noise_0.10_p_0.25_t_0.2_run2 --skip 20 --batch 400 --slice 1000 --N 10000
+
+CleanACC = 494/500 = 0.988 CertAcc = 486/500 = 0.972 RACC = 484/500 = 0.968
+
+
+~/anaconda3/bin/python semantic/strict_resize_certify.py cifar10 models/cifar10/resnet110/resize/noise_0.15_0.75_1.25/checkpoint.pth.tar 0.8 1.2 0.15 data/predict/cifar10/resize_alias_stat/0.8_1.2_1000_250 data/predict/cifar10/resnet110/resize/noise_0.15_0.75_1.25_by_0.8_1.2_1000_250 --skip 20 --batch 400 --slice 1000 --N 10000
+
+CleanACC = 409/500 = 0.818 CertAcc = 302/500 = 0.604 RACC = 288/500 = 0.576
+
+
+~/anaconda3/bin/python semantic/strict_resize_certify.py imagenet models/imagenet/resnet50/scaling/pretrain_noise_0.50_p0.15/checkpoint.pth.tar 0.85 1.15 0.50 data/predict/imagenet/resize_alias_stat/0.9_1.1_1000_400 data/predict/imagenet/resnet50/scaling/pretrain_noise_0.50_p0.15_run2 --skip 500 --batch 80 --slice 1000 --N 10000
+
+CleanACC = 58/100 = 0.58 CertAcc = 32/100 = 0.32 RACC = 27/100 = 0.27
+

@@ -12,7 +12,7 @@ import torch.nn as nn
 # resnet50 - the classic ResNet-50, sized for ImageNet
 # cifar_resnet20 - a 20-layer residual network sized for CIFAR
 # cifar_resnet110 - a 110-layer residual network sized for CIFAR
-ARCHITECTURES = ["resnet50", "cifar_resnet20", "cifar_resnet110"]
+ARCHITECTURES = ["resnet50", "cifar_resnet20", "cifar_resnet110", 'mnist_43']
 
 def get_architecture(arch: str, dataset: str) -> torch.nn.Module:
     """ Return a neural network (with random weights)

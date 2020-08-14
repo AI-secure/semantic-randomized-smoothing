@@ -2,6 +2,7 @@ data/
 dataset_cache/
 models/
 test/
+visualize/
 __*
 semantic/__*
 archs/__*

@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.append('.')
+sys.path.append('..')
 
 import setproctitle
 import os
@@ -225,6 +229,7 @@ if __name__ == '__main__':
         print('working on #', i)
 
         global_max_aliasing = 0.0
+        global_before_time = time()
         for j in range(args.slice-1):
 
             local_sr = 1.0 / (gbl_k * (gbl_c + j))
@@ -286,7 +291,7 @@ if __name__ == '__main__':
                 print(i, f'{j}/{args.slice}', f'[{local_sl:.3f}, {local_sr:.3f}]', max_aliasing, global_max_aliasing, str(datetime.timedelta(seconds=(time() - before_time))))
                 before_time = time()
 
-        print(f'{i}\t{global_max_aliasing}', file=f, flush=True)
+        print(f'{i}\t{global_max_aliasing}\t{str(datetime.timedelta(seconds=(time() - global_before_time)))}', file=f, flush=True)
 
     f.close()
 

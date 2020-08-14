@@ -136,9 +136,13 @@ class BrightnessTransformer(AbstractTransformer):
 
     def calc_b_bound(self, k: float, pABar: float):
         if k >= 0.0:
-            pBBar = 2.0 - 2.0 * norm.cdf(math.exp(k / 2.0) * norm.ppf(1.0 - pABar / 2.0))
+            # Wrong!
+            # pBBar = 2.0 - 2.0 * norm.cdf(math.exp(k / 2.0) * norm.ppf(1.0 - pABar / 2.0))
+            pBBar = 2.0 - 2.0 * norm.cdf(math.exp(k) * norm.ppf(1.0 - pABar / 2.0))
         else:
-            pBBar = 2.0 * norm.cdf(math.exp(k / 2.0) * norm.ppf(0.5 + pABar / 2.0)) - 1.0
+            # Wrong!
+            # pBBar = 2.0 * norm.cdf(math.exp(k / 2.0) * norm.ppf(0.5 + pABar / 2.0)) - 1.0
+            pBBar = 2.0 * norm.cdf(math.exp(k) * norm.ppf(0.5 + pABar / 2.0)) - 1.0
 
         if pBBar > 0.5:
             if self.sigma_k == 0.0 and k == 0.0:
@@ -238,6 +242,63 @@ class GaussianTransformer(AbstractTransformer):
             return 0.0
 
 
+class ExpGaussianTransformer(AbstractTransformer):
+
+    def __init__(self, sigma):
+        super(ExpGaussianTransformer, self).__init__()
+        self.gaussian_adder = transforms.ExpGaussian(sigma)
+
+    def process(self, inputs):
+        outs = self.gaussian_adder.batch_proc(self.gaussian_adder.batch_proc(inputs))
+        return outs
+
+    def calc_radius(self, pABar: float):
+        if pABar >= 0.5:
+            return math.sqrt(-self.gaussian_adder.sigma * math.log(2.0 - 2.0 * pABar))
+        else:
+            return 0.0
+
+
+class RotationBrightnessNoiseTransformer(AbstractTransformer):
+
+    def __init__(self, sigma, b, canopy, rotation_angle=180.0):
+        super(RotationBrightnessNoiseTransformer, self).__init__()
+        self.sigma = sigma
+        self.b = b
+        self.noise_adder = transforms.Noise(self.sigma)
+        self.brightness_adder = transforms.BrightnessShift(self.b)
+        self.rotation_adder = transforms.Rotation(canopy, rotation_angle)
+        self.round = 2
+        self.masking = True
+
+    def set_round(self, r=1):
+        self.round = r
+
+    def enable_masking(self, masking):
+        self.masking = masking
+
+    def process(self, inputs):
+        # two-round rotation for training & certifying
+        # for predicting, only one-round rotation
+        # then add Gaussian noise
+        outs = inputs
+        for r in range(self.round):
+            outs = self.rotation_adder.batch_proc(outs)
+        outs = self.noise_adder.batch_proc(outs)
+        outs = self.brightness_adder.batch_proc(outs)
+        if self.masking:
+            outs = self.rotation_adder.batch_masking(outs)
+        return outs
+
+    def calc_radius(self, pABar: float, b=0.):
+        if norm.ppf(pABar) ** 2. - (b ** 2.) / (self.b ** 2.) >= 0.:
+            radius = self.sigma * math.sqrt(norm.ppf(pABar) ** 2. - (b ** 2.) / (self.b ** 2.))
+        else:
+            radius = 0.
+        return radius
+
+
+
 def gen_transformer(args, canopy) -> AbstractTransformer:
     if args.transtype == 'rotation-noise':
         print(f'rotation-noise with noise {args.noise_sd}')
@@ -265,11 +326,19 @@ def gen_transformer(args, canopy) -> AbstractTransformer:
     elif args.transtype == 'resize':
         print(f'resize from ratio {args.sl} to {args.sr} with noise {args.noise_sd}')
         return ResizeNoiseTransformer(canopy, args.sl, args.sr, args.noise_sd)
+    elif args.transtype == 'expgaussian':
+        print(f'gaussian with exponential noise from 0 to {args.noise_sd}')
+        return ExpGaussianTransformer(args.noise_sd)
     elif args.transtype == 'gaussian':
         print(f'gaussian with uniform noise from 0 to {args.noise_sd}')
         return GaussianTransformer(args.noise_sd)
     elif args.transtype == 'btranslation':
         print(f'black-padding translation with noise {args.noise_sd}')
         return BlackpadTranslationTransformer(args.noise_sd, canopy)
+    elif args.transtype == 'rotation-brightness':
+        print(f'strict rotation angle in +-{args.rotation_angle} and noise in {args.noise_sd} with b noise {args.noise_b}')
+        rnt = RotationBrightnessNoiseTransformer(args.noise_sd, args.noise_b, canopy, args.rotation_angle)
+        rnt.set_round(1)
+        return rnt
     else:
         raise NotImplementedError

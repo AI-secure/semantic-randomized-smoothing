@@ -14,9 +14,11 @@ IMAGENET_LOC_ENV = "IMAGENET_DIR"
 os.environ[IMAGENET_LOC_ENV] = "/srv/local/data/ImageNet/ILSVRC2012_full"
 # on asedl but mount to aisecure gpu1
 # os.environ[IMAGENET_LOC_ENV] = "/home/linyi2/data_mnt/imagenet/ILSVRC2012"
+# on asedl but sync mount
+# os.environ[IMAGENET_LOC_ENV] = "/home/linyi2/data_mnt/local_imagenet/data/ImageNet/ILSVRC2012_full"
 
 # list of all datasets
-DATASETS = ["imagenet", "cifar10"]
+DATASETS = ["imagenet", "cifar10", "mnist"]
 
 
 def get_dataset(dataset: str, split: str) -> Dataset:
@@ -37,6 +39,18 @@ def get_num_classes(dataset: str):
         return 1000
     elif dataset == "cifar10":
         return 10
+    elif dataset == "mnist":
+        return 10
+
+
+def get_dataset_shape(dataset: str):
+    """Return the number of classes in the dataset. """
+    if dataset == "imagenet":
+        return (3, 224, 224)
+    elif dataset == "cifar10":
+        return (3, 32, 32)
+    elif dataset == "mnist":
+        return (1, 28, 28)
 
 
 def get_normalize_layer(dataset: str) -> torch.nn.Module:
@@ -45,8 +59,10 @@ def get_normalize_layer(dataset: str) -> torch.nn.Module:
         return NormalizeLayer(_IMAGENET_MEAN, _IMAGENET_STDDEV)
     elif dataset == "cifar10":
         return NormalizeLayer(_CIFAR10_MEAN, _CIFAR10_STDDEV)
+    elif dataset == "mnist":
+        return NormalizeLayer(_MNIST_MEAN, _MNIST_STDDEV)
     else:
-        return NormalizeLayer(_DEFAULT_MEAN, _DEFAULT_STDDEV)
+        raise Exception("Unknown dataset")
 
 
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -54,6 +70,9 @@ _IMAGENET_STDDEV = [0.229, 0.224, 0.225]
 
 _CIFAR10_MEAN = [0.4914, 0.4822, 0.4465]
 _CIFAR10_STDDEV = [0.2023, 0.1994, 0.2010]
+
+_MNIST_MEAN = [0.5]
+_MNIST_STDDEV = [0.5]
 
 _DEFAULT_MEAN = [0.5, 0.5, 0.5]
 _DEFAULT_STDDEV = [0.5, 0.5, 0.5]
@@ -129,6 +148,6 @@ class NormalizeLayer(torch.nn.Module):
 
     def forward(self, input: torch.tensor):
         (batch_size, num_channels, height, width) = input.shape
-        means = self.means.repeat((batch_size, height, width, 1)).permute(0, 3, 1, 2)
-        sds = self.sds.repeat((batch_size, height, width, 1)).permute(0, 3, 1, 2)
+        means = self.means.repeat((batch_size, height, width, 1)).permute(0, 3, 1, 2).contiguous()
+        sds = self.sds.repeat((batch_size, height, width, 1)).permute(0, 3, 1, 2).contiguous()
         return (input - means) / sds

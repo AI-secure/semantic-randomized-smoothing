@@ -19,16 +19,12 @@ from torch.optim.lr_scheduler import StepLR
 import time
 import datetime
 from train_utils import AverageMeter, accuracy, init_logfile, log
-from semantic.transformers import gen_transformer, AbstractTransformer
 
-parser = argparse.ArgumentParser(description='PyTorch Training')
+
+parser = argparse.ArgumentParser(description='PyTorch Vanilla Training')
 parser.add_argument('dataset', type=str, choices=DATASETS)
 parser.add_argument('arch', type=str, choices=ARCHITECTURES)
-parser.add_argument('transtype', type=str, help='type of semantic transformations',
-                    choices=['rotation-noise', 'noise', 'rotation', 'strict-rotation-noise', 'translation', 'brightness', 'resize', 'gaussian', 'btranslation', 'expgaussian', 'rotation-brightness'])
 parser.add_argument('outdir', type=str, help='folder to save model and training log)')
-parser.add_argument('--workers', default=4, type=int, metavar='N',
-                    help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--batch', default=256, type=int, metavar='N',
@@ -43,24 +39,15 @@ parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
-parser.add_argument('--noise_sd', default=0.0, type=float,
-                    help="standard deviation of Gaussian noise for data augmentation")
-parser.add_argument('--rotation_angle', help='constrain the rotation angle to +-rotation angle in degree',
-                    type=float, default=180.0)
-parser.add_argument('--noise_k', default=0.0, type=float,
-                    help="standard deviation of brightness scaling")
-parser.add_argument('--noise_b', default=0.0, type=float,
-                    help="standard deviation of brightness shift")
-parser.add_argument('--sl', default=1.0, type=float,
-                    help="resize minimum ratio")
-parser.add_argument('--sr', default=1.0, type=float,
-                    help="resize maximum ratio")
 parser.add_argument('--gpu', default=None, type=str,
                     help='id(s) for CUDA_VISIBLE_DEVICES')
 parser.add_argument('--print_freq', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
+parser.add_argument('--workers', default=4, type=int, metavar='N',
+                    help='number of data loading workers (default: 4)')
 parser.add_argument('--pretrain', default=None, type=str)
 args = parser.parse_args()
+
 
 def main():
     if args.gpu:
@@ -79,17 +66,14 @@ def main():
 
     model = get_architecture(args.arch, args.dataset)
 
+    # if we have a pretrain model, just directly use it, no training
     if args.pretrain is not None:
         if args.pretrain == 'torchvision':
             # load pretrain model from torchvision
             if args.dataset == 'imagenet' and args.arch == 'resnet50':
                 model = torchvision.models.resnet50(True).cuda()
-
-                # fix
                 normalize_layer = get_normalize_layer('imagenet').cuda()
                 model = torch.nn.Sequential(normalize_layer, model)
-
-
                 print('loaded from torchvision for imagenet resnet50')
             else:
                 raise Exception(f'Unsupported pretrain arg {args.pretrain}')
@@ -99,29 +83,24 @@ def main():
             model.load_state_dict(checkpoint['state_dict'])
             print(f'loaded from {args.pretrain}')
 
-    logfilename = os.path.join(args.outdir, 'log.txt')
-    init_logfile(logfilename, "epoch\ttime\tlr\ttrain loss\ttrain acc\ttestloss\ttest acc")
+        logfilename = os.path.join(args.outdir, 'log.txt')
+        init_logfile(logfilename, "epoch\ttime\tlr\ttrain loss\ttrain acc\ttestloss\ttest acc")
 
-    canopy = None
-    for (inputs, targets) in train_loader:
-        canopy = inputs[0]
-        break
-    transformer = gen_transformer(args, canopy)
+        criterion = CrossEntropyLoss().cuda()
+        # the optimizer is just a placeholder
+        optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
-    criterion = CrossEntropyLoss().cuda()
-    optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    scheduler = StepLR(optimizer, step_size=args.lr_step_size, gamma=args.gamma)
-
-    for epoch in range(args.epochs):
-        scheduler.step(epoch)
         before = time.time()
-        train_loss, train_acc = train(train_loader, model, criterion, optimizer, epoch, transformer)
-        test_loss, test_acc = test(test_loader, model, criterion, transformer)
+        test_loss, test_acc = test(test_loader, model, criterion)
         after = time.time()
+
+        epoch = 0
+        lr = 0.0
+        train_loss = train_acc = 0.0
 
         log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
             epoch, str(datetime.timedelta(seconds=(after - before))),
-            scheduler.get_lr()[0], train_loss, train_acc, test_loss, test_acc))
+            lr, train_loss, train_acc, test_loss, test_acc))
 
         torch.save({
             'epoch': epoch + 1,
@@ -130,8 +109,40 @@ def main():
             'optimizer': optimizer.state_dict(),
         }, os.path.join(args.outdir, 'checkpoint.pth.tar'))
 
+    else:
 
-def train(loader: DataLoader, model: torch.nn.Module, criterion, optimizer: Optimizer, epoch: int, transformer: AbstractTransformer):
+        logfilename = os.path.join(args.outdir, 'log.txt')
+        init_logfile(logfilename, "epoch\ttime\tlr\ttrain loss\ttrain acc\ttestloss\ttest acc")
+
+        canopy = None
+        for (inputs, targets) in train_loader:
+            canopy = inputs[0]
+            break
+
+        criterion = CrossEntropyLoss().cuda()
+        optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        scheduler = StepLR(optimizer, step_size=args.lr_step_size, gamma=args.gamma)
+
+        for epoch in range(args.epochs):
+            scheduler.step(epoch)
+            before = time.time()
+            train_loss, train_acc = train(train_loader, model, criterion, optimizer, epoch)
+            test_loss, test_acc = test(test_loader, model, criterion)
+            after = time.time()
+
+            log(logfilename, "{}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}".format(
+                epoch, str(datetime.timedelta(seconds=(after - before))),
+                scheduler.get_lr()[0], train_loss, train_acc, test_loss, test_acc))
+
+            torch.save({
+                'epoch': epoch + 1,
+                'arch': args.arch,
+                'state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+            }, os.path.join(args.outdir, 'checkpoint.pth.tar'))
+
+
+def train(loader: DataLoader, model: torch.nn.Module, criterion, optimizer: Optimizer, epoch: int):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -146,11 +157,8 @@ def train(loader: DataLoader, model: torch.nn.Module, criterion, optimizer: Opti
         # measure data loading time
         data_time.update(time.time() - end)
 
-        inputs = inputs
+        inputs = inputs.cuda()
         targets = targets.cuda()
-
-        # augment inputs with noise
-        inputs = transformer.process(inputs).cuda()
 
         # compute output
         outputs = model(inputs)
@@ -184,7 +192,7 @@ def train(loader: DataLoader, model: torch.nn.Module, criterion, optimizer: Opti
     return (losses.avg, top1.avg)
 
 
-def test(loader: DataLoader, model: torch.nn.Module, criterion, transformer: AbstractTransformer):
+def test(loader: DataLoader, model: torch.nn.Module, criterion):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -200,11 +208,8 @@ def test(loader: DataLoader, model: torch.nn.Module, criterion, transformer: Abs
             # measure data loading time
             data_time.update(time.time() - end)
 
-            inputs = inputs
+            inputs = inputs.cuda()
             targets = targets.cuda()
-
-            # augment inputs with noise
-            inputs = transformer.process(inputs).cuda()
 
             # compute output
             outputs = model(inputs)
@@ -235,3 +240,7 @@ def test(loader: DataLoader, model: torch.nn.Module, criterion, transformer: Abs
 
 if __name__ == "__main__":
     main()
+
+
+
+

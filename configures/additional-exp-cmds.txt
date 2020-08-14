@@ -1,0 +1,179 @@
+rotation-brightness:
+
+	training:
+		[MNIST]
+		~/anaconda3/bin/python semantic/train.py mnist mnist_43 rotation-brightness models/mnist/mnist_43/rotation-brightness/pretrain_noise_0.50_r_35_0.30 --batch 400 --noise_sd 0.50 --noise_b 0.30 --rotation_angle 35 --lr 0.1 --gpu 3 --epochs 20
+
+		[CIFAR10]
+		~/anaconda3/bin/python semantic/train.py cifar10 cifar_resnet110 rotation-brightness models/cifar10/resnet110/rotation-brightness/pretrain_noise_0.05_r_12.5_0.30 --batch 400 --noise_sd 0.05 --noise_b 0.30 --rotation_angle 12.5 --lr 0.1 --gpu 2 --epochs 90
+
+		[ImageNet]
+		~/anaconda3/bin/python semantic/train.py imagenet resnet50 rotation-brightness models/imagenet/resnet50/rotation-brightness/pretrain_noise_0.50_r_12.5_0.30 --pretrain models/imagenet/resnet50/rotation/pretrain_noise_0.50_r_12.5/checkpoint.pth.tar --batch 80 --noise_sd 0.50 --noise_b 0.30 --rotation_angle 12.5 --lr 0.001 --gpu 1 --epochs 3
+
+	certify:
+		[MNIST]
+		b = 0.1
+		~/anaconda3/bin/python semantic/strict_rotation_certify.py mnist models/mnist/mnist_43/rotation-brightness/pretrain_noise_0.50_r_35_0.30/checkpoint.pth.tar 0.50 --noise_b 0.30 --b 0.10 data/predict/mnist/rotation_alias_stat/1000_1000_p_30 data/predict/mnist/mnist_43/rotation-brightness/pretrain_noise_0.50_r_35_0.30 --N 100000 --skip 20 --batch 400 --slice 1000 --partial 30
+
+		b = 0.0
+		~/anaconda3/bin/python semantic/strict_rotation_certify.py mnist models/mnist/mnist_43/rotation-brightness/pretrain_noise_0.50_r_35_0.30/checkpoint.pth.tar 0.50 --noise_b 0.30 --b 0.00 data/predict/mnist/rotation_alias_stat/1000_1000_p_30 data/predict/mnist/mnist_43/rotation-brightness/pretrain_noise_0.50_r_35_0.30_b_0.00 --N 100000 --skip 20 --batch 400 --slice 1000 --partial 30
+
+		b = 0.3
+		~/anaconda3/bin/python semantic/strict_rotation_certify.py mnist models/mnist/mnist_43/rotation-brightness/pretrain_noise_0.50_r_35_0.30/checkpoint.pth.tar 0.50 --noise_b 0.30 --b 0.30 data/predict/mnist/rotation_alias_stat/1000_1000_p_30 data/predict/mnist/mnist_43/rotation-brightness/pretrain_noise_0.50_r_35_0.30_b_0.30 --N 100000 --skip 20 --batch 400 --slice 1000 --partial 30
+
+		[CIFAR10]
+		~/anaconda3/bin/python semantic/strict_rotation_certify.py cifar10 models/cifar10/resnet110/rotation-brightness/pretrain_noise_0.05_r_12.5_0.30/checkpoint.pth.tar 0.05 --noise_b 0.30 --b 0.10 data/predict/cifar10/alias_stat/10000_1000_p_30 data/predict/cifar10/resnet110/rotation-brightness/retrain_noise_0.05_r_12.5_0.30 --N 100000 --skip 20 --batch 400 --slice 10000 --partial 10
+
+		b = 0.3
+		~/anaconda3/bin/python semantic/strict_rotation_certify.py cifar10 models/cifar10/resnet110/rotation-brightness/pretrain_noise_0.05_r_12.5_0.30/checkpoint.pth.tar 0.05 --noise_b 0.30 --b 0.30 data/predict/cifar10/alias_stat/10000_1000_p_30 data/predict/cifar10/resnet110/rotation-brightness/retrain_noise_0.05_r_12.5_0.30_b_0.30 --N 100000 --skip 20 --batch 400 --slice 10000 --partial 10
+
+		run on run3
+
+
+		[ImageNet]
+		~/anaconda3/bin/python semantic/strict_rotation_certify.py imagenet models/imagenet/resnet50/rotation-brightness/pretrain_noise_0.50_r_12.5_0.30/checkpoint.pth.tar 0.50 --noise_b 0.30 --b 0.10 data/predict/imagenet/rotation_alias_stat/20000_1000_p_10 data/predict/imagenet/resnet50/rotation-brightness/pretrain_noise_0.50_r_12.5_0.30 --N 10000 --skip 500 --batch 80 --slice 20000 --partial 10
+
+		run on run1
+
+		b = 0.30
+		~/anaconda3/bin/python semantic/strict_rotation_certify.py imagenet models/imagenet/resnet50/rotation-brightness/pretrain_noise_0.50_r_12.5_0.30/checkpoint.pth.tar 0.50 --noise_b 0.30 --b 0.30 data/predict/imagenet/rotation_alias_stat/20000_1000_p_10 data/predict/imagenet/resnet50/rotation-brightness/pretrain_noise_0.50_r_12.5_0.30_b_0.30 --N 10000 --skip 500 --batch 80 --slice 20000 --partial 10
+
+		run on run0
+
+
+clean training:
+	
+	[MNIST]
+
+		run0 gpu2:
+		~/anaconda3/bin/python semantic/baselines/stdtrain.py mnist mnist_43 models/mnist/mnist_43/stdtrain --epochs 20 --batch 400 --lr 0.1 --gpu 2 
+
+	[CIFAR10]:
+
+		run0 gpu2:
+		~/anaconda3/bin/python semantic/baselines/stdtrain.py cifar10 cifar_resnet110 models/cifar10/resnet110/stdtrain --epochs 90 --batch 400 --lr 0.1 --gpu 2 
+
+	[ImageNet]
+
+		run0 gpu0:
+		~/anaconda3/bin/python semantic/baselines/stdtrain.py imagenet resnet50 models/imagenet/resnet50/pretrain --epochs 1 --batch 80 --lr 0.001 --gpu 0 --pretrain torchvision
+
+
+clean attack:
+	
+	[MNIST]
+
+		brightness 0.1:
+			~/anaconda3/bin/python semantic/baselines/randattack.py mnist models/mnist/mnist_43/stdtrain/checkpoint.pth.tar data/vanilla/mnist/brightness/result.log brightness --param1 0.1 --skip 20 --gpu 0
+
+		gaussian blur 9:
+			~/anaconda3/bin/python semantic/baselines/randattack.py mnist models/mnist/mnist_43/stdtrain/checkpoint.pth.tar data/vanilla/mnist/gaussian/result.log gaussian --param1 9 --skip 20 --gpu 0
+
+		translation 5:
+			~/anaconda3/bin/python semantic/baselines/randattack.py mnist models/mnist/mnist_43/stdtrain/checkpoint.pth.tar data/vanilla/mnist/translation/result.log translation --param1 5 --skip 20 --gpu 0 --tries 1000
+
+		contrast 0.3:
+			~/anaconda3/bin/python semantic/baselines/randattack.py mnist models/mnist/mnist_43/stdtrain/checkpoint.pth.tar data/vanilla/mnist/contrast/result.log contrast --param1 0.3 --skip 20 --gpu 0
+
+		brightness-contrast 0.2 0.2:
+			~/anaconda3/bin/python semantic/baselines/randattack.py mnist models/mnist/mnist_43/stdtrain/checkpoint.pth.tar data/vanilla/mnist/brightness-contrast/result.log brightness-contrast --param1 0.2 --param2 0.2 --skip 20 --gpu 0 --tries 1000
+
+		rotation 30:
+			~/anaconda3/bin/python semantic/baselines/randattack.py mnist models/mnist/mnist_43/stdtrain/checkpoint.pth.tar data/vanilla/mnist/rotation/result.log rotation --param1 30 --skip 20 --gpu 0 --tries 1000
+
+		resize 0.2:
+			~/anaconda3/bin/python semantic/baselines/randattack.py mnist models/mnist/mnist_43/stdtrain/checkpoint.pth.tar data/vanilla/mnist/resize/result.log resize --param1 0.2 --skip 20 --gpu 0 --tries 1000
+
+		rotation-brightness 30 0.1:
+			~/anaconda3/bin/python semantic/baselines/randattack.py mnist models/mnist/mnist_43/stdtrain/checkpoint.pth.tar data/vanilla/mnist/rotation-brightness/result.log rotation-brightness --param1 30 --param2 0.1 --skip 20 --gpu 0 --tries 1000
+
+
+	[CIFAR10]:
+
+		brightness 0.1:
+			~/anaconda3/bin/python semantic/baselines/randattack.py cifar10 models/cifar10/resnet110/stdtrain/checkpoint.pth.tar data/vanilla/cifar10/brightness/result.log brightness --param1 0.1 --skip 20 --gpu 0 --tries 1000
+
+		gaussian blur 9:
+			~/anaconda3/bin/python semantic/baselines/randattack.py cifar10 models/cifar10/resnet110/stdtrain/checkpoint.pth.tar data/vanilla/cifar10/gaussian/result.log gaussian --param1 9 --skip 20 --gpu 0 --tries 1000
+
+		translation 5:
+			~/anaconda3/bin/python semantic/baselines/randattack.py cifar10 models/cifar10/resnet110/stdtrain/checkpoint.pth.tar data/vanilla/cifar10/translation/result.log translation --param1 5 --skip 20 --gpu 0 --tries 400
+
+		contrast 0.3:
+			~/anaconda3/bin/python semantic/baselines/randattack.py cifar10 models/cifar10/resnet110/stdtrain/checkpoint.pth.tar data/vanilla/cifar10/contrast/result.log contrast --param1 0.3 --skip 20 --gpu 0 --tries 10000
+
+		brightness-contrast 0.2 0.2:
+			~/anaconda3/bin/python semantic/baselines/randattack.py cifar10 models/cifar10/resnet110/stdtrain/checkpoint.pth.tar data/vanilla/cifar10/brightness-contrast/result.log brightness-contrast --param1 0.2 --param2 0.2 --skip 20 --gpu 0 --tries 1000
+
+		rotation 10:
+			~/anaconda3/bin/python semantic/baselines/randattack.py cifar10 models/cifar10/resnet110/stdtrain/checkpoint.pth.tar data/vanilla/cifar10/rotation/result.log rotation --param1 10 --skip 20 --gpu 0 --tries 1000
+
+		resize 0.2:
+			~/anaconda3/bin/python semantic/baselines/randattack.py cifar10 models/cifar10/resnet110/stdtrain/checkpoint.pth.tar data/vanilla/cifar10/resize/result.log resize --param1 0.2 --skip 20 --gpu 0 --tries 1000
+
+
+		rotation-brightness 10 0.1:
+			~/anaconda3/bin/python semantic/baselines/randattack.py cifar10 models/cifar10/resnet110/stdtrain/checkpoint.pth.tar data/vanilla/cifar10/rotation-brightness/result.log rotation-brightness --param1 10 --param2 0.1 --skip 20 --gpu 0 --tries 1000
+
+	[ImageNet]:
+
+		brightness 0.1:
+			~/anaconda3/bin/python semantic/baselines/randattack.py imagenet models/imagenet/resnet50/pretrain/checkpoint.pth.tar data/vanilla/imagenet/brightness/result.log brightness --param1 0.1 --skip 500 --gpu 2 --tries 1000 --batch 100
+
+		gaussian blur 9:
+			~/anaconda3/bin/python semantic/baselines/randattack.py imagenet models/imagenet/resnet50/pretrain/checkpoint.pth.tar data/vanilla/imagenet/gaussian/result.log gaussian --param1 9 --skip 500 --gpu 2 --tries 1000 --batch 100
+
+		translation 5:
+			~/anaconda3/bin/python semantic/baselines/randattack.py imagenet models/imagenet/resnet50/pretrain/checkpoint.pth.tar data/vanilla/imagenet/translation/result.log translation --param1 5 --skip 500 --gpu 2 --tries 1000 --batch 100
+
+		contrast 0.3:
+			~/anaconda3/bin/python semantic/baselines/randattack.py imagenet models/imagenet/resnet50/pretrain/checkpoint.pth.tar data/vanilla/imagenet/contrast/result.log contrast --param1 0.3 --skip 500 --gpu 2 --tries 10000 --batch 100
+		
+		brightness-contrast 0.2 0.2:
+			~/anaconda3/bin/python semantic/baselines/randattack.py imagenet models/imagenet/resnet50/pretrain/checkpoint.pth.tar data/vanilla/imagenet/brightness-contrast/result.log brightness-contrast --param1 0.2 --param2 0.2 --skip 500 --gpu 2 --tries 1000 --batch 100
+
+		rotation 10:
+			~/anaconda3/bin/python semantic/baselines/randattack.py imagenet models/imagenet/resnet50/pretrain/checkpoint.pth.tar data/vanilla/imagenet/rotation/result.log rotation --param1 10 --skip 500 --gpu 2 --tries 1000 --batch 100
+
+		resize 0.15:
+			~/anaconda3/bin/python semantic/baselines/randattack.py imagenet models/imagenet/resnet50/pretrain/checkpoint.pth.tar data/vanilla/imagenet/resize/result.log resize --param1 0.15 --skip 500 --gpu 2 --tries 1000 --batch 100
+
+		rotation-brightness 10 0.1:
+			~/anaconda3/bin/python semantic/baselines/randattack.py imagenet models/imagenet/resnet50/pretrain/checkpoint.pth.tar data/vanilla/imagenet/rotation-brightness/result.log rotation-brightness --param1 0.10 --param2 0.1 --skip 500 --gpu 2 --tries 1000 --batch 100
+
+
+
+grid search cert:
+	
+	[MNIST]
+
+		brightness 0.1:
+			~/anaconda3/bin/python semantic/baselines/gridcert.py mnist models/mnist/mnist_43/brightness_contrast/noise_0.3_0.3/checkpoint.pth.tar data/gridsearchcert/mnist/brightness/result.log brightness --param1 0.1 --skip 20 --gpu 0 --tries1 100000 --batch 5000
+
+		contrast 0.3:
+			~/anaconda3/bin/python semantic/baselines/gridcert.py mnist models/mnist/mnist_43/brightness_contrast/noise_0.3_0.3/checkpoint.pth.tar data/gridsearchcert/mnist/contrast/result.log contrast --param1 0.3 --skip 20 --gpu 1 --tries1 100000 --batch 5000
+
+		rotation 30:
+
+			~/anaconda3/bin/python semantic/strict_rotation_aliasing_analyze.py mnist data/predict/mnist/rotation_alias_stat/100000_5_p_30 --skip 20 --slice 1000000 --subslice 2 --partial 30
+
+
+		scaling 0.2:
+
+			~/anaconda3/bin/python semantic/strict_resize_aliasing_analyze.py mnist data/predict/mnist/resize_alias_stat/0.8_1.2_100000_2 0.8 1.2 --skip 500 --slice 100000 --subslice 2
+
+
+
+	[CIFAR10]:
+
+		brightness 0.1:
+			~/anaconda3/bin/python semantic/baselines/gridcert.py cifar10 models/cifar10/resnet110/brightness/noise_0.2_0.2/checkpoint.pth.tar data/gridsearchcert/cifar10/brightness/result.log brightness --param1 0.1 --skip 20 --gpu 0 --tries1 1000
+
+	[ImageNet]:
+
+		brightness 0.1:
+			~/anaconda3/bin/python semantic/baselines/gridcert.py imagenet models/imagenet/resnet50/brightness/pretrain_noise_0.2_0.2/checkpoint.pth.tar data/gridsearchcert/imagenet/brightness/result.log brightness --param1 0.1 --skip 500 --gpu 2 --tries1 1000 --batch 100
+
+
+
+		

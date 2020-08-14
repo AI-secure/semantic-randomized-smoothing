@@ -120,7 +120,7 @@ class StrictRotationSmooth(object):
     # to abstain, Smooth returns this int
     ABSTAIN = -1
 
-    def __init__(self, base_classifier: torch.nn.Module, num_classes: int, sigma: float):
+    def __init__(self, base_classifier: torch.nn.Module, num_classes: int, sigma: float, sigma_b: float):
         """
         :param base_classifier: maps from [batch x channel x height x width] to [batch x num_classes]
         :param num_classes:
@@ -129,6 +129,7 @@ class StrictRotationSmooth(object):
         self.base_classifier = base_classifier
         self.num_classes = num_classes
         self.sigma = sigma
+        self.sigma_b = sigma_b
 
     def guess_top(self, x: torch.tensor, n0: int, batch_size: int) -> int:
 
@@ -138,7 +139,7 @@ class StrictRotationSmooth(object):
         cAHat = counts_selection.argmax().item()
         return cAHat
 
-    def certify(self, x: torch.tensor, cAHat: int, maxn: int, alpha: float, batch_size: int, margin: float) -> (int, float):
+    def certify(self, x: torch.tensor, cAHat: int, maxn: int, alpha: float, batch_size: int, b: float, margin: float) -> (int, float):
         """ Monte Carlo algorithm for certifying that g's prediction around x is constant within some L2 radius.
         With probability at least 1 - alpha, the class returned by this method will equal g(x), and g's prediction will
         robust within a L2 ball of radius R around x.
@@ -154,16 +155,18 @@ class StrictRotationSmooth(object):
             # use these samples to estimate a lower bound on pA
             nA += counts_estimation[cAHat].item()
             pABar = self._lower_confidence_bound(nA, n, alpha)
-            if pABar >= 0.5:
-                radius = self.sigma * norm.ppf(pABar)
-                radius **= 2
+            if pABar >= 0.5 and norm.ppf(pABar) ** 2 - b ** 2 / max(self.sigma_b, 1e-3) ** 2 >= 0.:
+                radius = (self.sigma ** 2) * (norm.ppf(pABar) ** 2 - b ** 2 / max(self.sigma_b, 1e-3) ** 2)
+                # radius = self.sigma * norm.ppf(pABar)
+                # radius **= 2
                 if radius >= margin:
                     return cAHat, radius - margin
-        if pABar < 0.5:
+        if pABar < 0.5 or norm.ppf(pABar) ** 2 - b ** 2 / max(self.sigma_b, 1e-3) ** 2 < 0.:
             return SemanticSmooth.ABSTAIN, 0.0
         else:
-            radius = self.sigma * norm.ppf(pABar)
-            radius **= 2
+            radius = (self.sigma ** 2) * (norm.ppf(pABar) ** 2 - b ** 2 / max(self.sigma_b, 1e-3) ** 2)
+            # radius = self.sigma * norm.ppf(pABar)
+            # radius **= 2
             return cAHat, radius - margin
 
     def predict(self, x: torch.tensor, n: int, alpha: float, batch_size: int) -> int:
@@ -205,7 +208,9 @@ class StrictRotationSmooth(object):
 
                 batch = x.repeat((this_batch_size, 1, 1, 1))
                 noise = torch.randn_like(batch, device='cuda') * self.sigma
-                predictions = self.base_classifier(batch + noise).argmax(1)
+                noise_b = torch.randn((this_batch_size), device='cuda') * self.sigma_b
+                noise_b = noise_b.reshape((this_batch_size, 1, 1, 1))
+                predictions = self.base_classifier(batch + noise + noise_b).argmax(1)
                 counts += self._count_arr(predictions.cpu().numpy(), self.num_classes)
             return counts
 

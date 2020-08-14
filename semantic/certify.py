@@ -4,7 +4,7 @@ import os
 # evaluate a smoothed classifier on a dataset
 import argparse
 import setGPU
-from datasets import get_dataset, DATASETS, get_num_classes
+from datasets import get_dataset, DATASETS, get_num_classes, get_normalize_layer
 from semantic.core import SemanticSmooth
 from time import time
 import torch
@@ -18,7 +18,7 @@ parser.add_argument("dataset", choices=DATASETS, help="which dataset")
 parser.add_argument("base_classifier", type=str, help="path to saved pytorch model of base classifier")
 parser.add_argument("noise_sd", type=float, help="noise hyperparameter")
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
-                    choices=['rotation-noise', 'noise', 'rotation', 'translation', 'brightness', 'contrast', 'gaussian'])
+                    choices=['rotation-noise', 'noise', 'rotation', 'translation', 'brightness', 'contrast', 'gaussian', 'expgaussian'])
 parser.add_argument("outfile", type=str, help="output file")
 parser.add_argument('--noise_k', default=0.0, type=float,
                     help="standard deviation of brightness scaling")
@@ -44,6 +44,11 @@ if __name__ == "__main__":
             base_classifier.load_state_dict(checkpoint['state_dict'])
         except:
             base_classifier = torchvision.models.resnet50(pretrained=False).cuda()
+
+            # fix
+            normalize_layer = get_normalize_layer('imagenet').cuda()
+            base_classifier = torch.nn.Sequential(normalize_layer, base_classifier)
+
     base_classifier.load_state_dict(checkpoint['state_dict'])
 
     # prepare output file

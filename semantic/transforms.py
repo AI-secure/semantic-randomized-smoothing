@@ -308,6 +308,14 @@ class Gaussian:
             outs[i] = self.proc(inputs[i], self.gen_param())
         return outs
 
+class ExpGaussian(Gaussian):
+    def __init__(self, sigma):
+        super(ExpGaussian, self).__init__(sigma)
+
+    def gen_param(self):
+        r = - self.sigma * math.log(random.uniform(0.0, 1.0))
+        return r
+
 
 def visualize(img, outfile):
     img = torch.tensor(img).clamp_(min=0.0, max=1.0)

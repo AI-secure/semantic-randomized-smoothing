@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.append('.')
+sys.path.append('..')
 
 import os
 import math
@@ -216,7 +220,7 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.dirname(args.aliasfile)):
         os.makedirs(os.path.dirname(args.aliasfile))
     f = open(args.aliasfile, 'w')
-    print('no.\tmaxl2sqr', file=f, flush=True)
+    print('no.\tmaxl2sqr\ttime', file=f, flush=True)
 
     before_time = time()
 
@@ -234,6 +238,7 @@ if __name__ == '__main__':
         (x, label) = dataset[i]
 
         print('working on #', i)
+        global_before_time = time()
 
         global_max_aliasing = 0.0
         d = 360.0 / (args.slice * args.subslice)
@@ -269,7 +274,7 @@ if __name__ == '__main__':
                 print(i, f'{j}/{args.slice}', max_aliasing, global_max_aliasing, str(datetime.timedelta(seconds=(time() - before_time))))
                 before_time = time()
 
-        print(f'{i}\t{global_max_aliasing}', file=f, flush=True)
+        print(f'{i}\t{global_max_aliasing}\t{str(datetime.timedelta(seconds=(time() - global_before_time)))}', file=f, flush=True)
 
     f.close()
 

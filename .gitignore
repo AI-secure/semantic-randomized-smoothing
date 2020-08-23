@@ -3,7 +3,7 @@ dataset_cache/
 models/
 test/
 visualize/
-__*
+__init*
 semantic/__*
 archs/__*
 *.so

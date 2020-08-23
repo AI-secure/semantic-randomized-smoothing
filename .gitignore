@@ -4,6 +4,7 @@ models/
 test/
 visualize/
 __init*
+__pycache*
 semantic/__*
 archs/__*
 *.so

@@ -12,9 +12,13 @@ intv = 1.0
 if __name__ == '__main__':
     tot_sample, num_worker = int(sys.argv[-3]), int(sys.argv[-1])
     assert sys.argv[-4] == '--totsample' and sys.argv[-2] == '--worker'
+    if len(sys.argv) > 6 and sys.argv[-6] == '--start':
+        base_n = int(sys.argv[-5])
+    else:
+        base_n = 0
     cmd = sys.argv[1:-4]
-    cmds = [cmd + ['--start', str(i * int(math.ceil(tot_sample / num_worker))),
-                   '--max', str(min((i + 1) * int(math.ceil(tot_sample / num_worker)), tot_sample))] for i in range(num_worker)]
+    cmds = [cmd + ['--start', str(base_n + i * int(math.ceil(tot_sample / num_worker))),
+                   '--max', str(base_n + min((i + 1) * int(math.ceil(tot_sample / num_worker)), tot_sample))] for i in range(num_worker)]
     fins = [False for _ in range(num_worker)]
 
     setproctitle.setproctitle("parallel_hoster")

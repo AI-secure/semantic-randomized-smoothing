@@ -6,4 +6,6 @@ visualize/
 __*
 semantic/__*
 archs/__*
+*.so
+*.o
 .idea/

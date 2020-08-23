@@ -27,10 +27,12 @@ parser.add_argument('dataset', type=str, choices=DATASETS)
 parser.add_argument("base_classifier", type=str, help="path to saved pytorch model of base classifier")
 parser.add_argument('outfile', type=str, help='folder to save model and training log)')
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
-                    choices=['gaussian', 'translation',  'brightness', 'contrast', 'brightness-contrast', 'rotation', 'resize', 'rotation-brightness'])
+                    choices=['gaussian', 'translation',  'brightness', 'contrast', 'brightness-contrast', 'rotation', 'resize', 'rotation-brightness', 'rotation-brightness-contrast'])
 parser.add_argument('--param1', default=None, type=float,
                     help='attack param1')
 parser.add_argument('--param2', default=None, type=float,
+                    help='attack param2')
+parser.add_argument('--param3', default=None, type=float,
                     help='attack param2')
 parser.add_argument('--batch', default=400, type=int,
                     help='batch size')
@@ -73,6 +75,8 @@ if __name__ == '__main__':
     tfunc = None
     tinst2 = None
     tfunc2 = None
+    tinst3 = None
+    tfunc3 = None
     if args.transtype == 'gaussian':
         tinst = T.Gaussian(0.0)
         tfunc = T.Gaussian.proc
@@ -104,6 +108,13 @@ if __name__ == '__main__':
         tfunc = T.Rotation.proc
         tinst2 = T.BrightnessShift(0.0)
         tfunc2 = T.BrightnessShift.proc
+    elif args.transtype == 'rotation-brightness-contrast':
+        tinst = T.Rotation(dataset[0][0], 0.0)
+        tfunc = T.Rotation.proc
+        tinst2 = T.BrightnessShift(0.0)
+        tfunc2 = T.BrightnessShift.proc
+        tinst3 = T.BrightnessScale(0.0)
+        tfunc3 = T.BrightnessScale.proc
 
     # rand generator
 
@@ -116,10 +127,14 @@ if __name__ == '__main__':
     else:
         param1l, param1r = -args.param1, +args.param1
 
+    param3l, param3r = None, None
     if args.transtype == 'brightness-contrast':
         param2l, param2r = math.log(1.0 - args.param2), math.log(1.0 + args.param2)
     elif args.transtype == 'rotation-brightness':
         param2l, param2r = -args.param2, +args.param2
+    elif args.transtype == 'rotation-brightness-contrast':
+        param2l, param2r = -args.param2, +args.param2
+        param3l, param3r = -args.param3, +args.param3
     else:
         param2l, param2r = None, None
 
@@ -139,6 +154,8 @@ if __name__ == '__main__':
     m1 = Uniform(param1l, param1r)
     if param2l is not None:
         m2 = Uniform(param2l, param2r)
+    if param3l is not None:
+        m3 = Uniform(param3l, param3r)
 
     tot = tot_benign = tot_robust = 0
 
@@ -176,12 +193,17 @@ if __name__ == '__main__':
                     param_sample1 = m1.sample((now_batch,))
                     if param2l is not None:
                         param_sample2 = m2.sample((now_batch,))
+                    if param3l is not None:
+                        param_sample3 = m3.sample((now_batch,))
 
                     for k in range(now_batch):
                         xp[k] = tfunc(tinst, x, param_sample1[k])
                     if param2l is not None:
                         for k in range(now_batch):
                             xp[k] = tfunc2(tinst2, xp[k], param_sample2[k])
+                    if param3l is not None:
+                        for k in range(now_batch):
+                            xp[k] = tfunc3(tinst3, xp[k], param_sample3[k])
 
                 xp = xp.contiguous().cuda()
                 preds = model(xp).argmax(1)

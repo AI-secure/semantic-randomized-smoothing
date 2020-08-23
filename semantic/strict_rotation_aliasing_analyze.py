@@ -251,6 +251,7 @@ if __name__ == '__main__':
                 continue
 
             base_img = rotationT.rotation_adder.proc(x, base_ang)
+            # exit(0)
             L = get_finer_lipschitz_bound(x, rotationT.rotation_adder.mask, base_ang, base_ang + 360.0 / args.slice)
 
             ang_l = base_ang

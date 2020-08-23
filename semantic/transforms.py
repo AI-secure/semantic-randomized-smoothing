@@ -9,6 +9,15 @@ import PIL.Image
 from torchvision.transforms import *
 import torchvision.transforms.functional as TF
 import cv2
+import numba
+from numba import jit
+try:
+    from semantic.C import transform_kern as kern
+    print('Fast kernel loaded')
+    use_kern = True
+except Exception:
+    print('Fast kernel not available, use PyTorch Kernel')
+    use_kern = False
 
 class Noise:
     def __init__(self, sigma):
@@ -39,46 +48,51 @@ class Rotation:
     def gen_param(self):
         return random.uniform(-self.rotation_angle, self.rotation_angle)
 
-    def raw_proc(self, input, angle):
+    def raw_proc(self, input: torch.Tensor, angle: float):
+        if use_kern:
+            np_input = np.ascontiguousarray(input.numpy(), dtype=np.float)
+            np_output = kern.rotation(np_input, angle)
+            output = torch.tensor(np_output)
+            return output
+        else:
+            c, h, w = input.shape
+            cy, cx = (h - 1) / 2.0, (w - 1) / 2.0
 
-        c, h, w = input.shape
-        cy, cx = (h - 1) / 2.0, (w - 1) / 2.0
+            rows = torch.linspace(0.0, h - 1, steps=h)
+            cols = torch.linspace(0.0, w - 1, steps=w)
 
-        rows = torch.linspace(0.0, h - 1, steps=h)
-        cols = torch.linspace(0.0, w - 1, steps=w)
+            dist_mat = ((rows - cy) * (rows - cy)).unsqueeze(1) + ((cols - cx) * (cols - cx)).unsqueeze(0)
+            dist_mat = torch.sqrt(dist_mat)
 
-        dist_mat = ((rows - cy) * (rows - cy)).unsqueeze(1) + ((cols - cx) * (cols - cx)).unsqueeze(0)
-        dist_mat = torch.sqrt(dist_mat)
+            rows_mat = rows.unsqueeze(1).repeat(1, w)
+            cols_mat = cols.repeat(h, 1)
+            alpha_mat = torch.atan2(rows_mat - cy, cols_mat - cx)
+            beta_mat = alpha_mat + angle * math.pi / 180.0
 
-        rows_mat = rows.unsqueeze(1).repeat(1, w)
-        cols_mat = cols.repeat(h, 1)
-        alpha_mat = torch.atan2(rows_mat - cy, cols_mat - cx)
-        beta_mat = alpha_mat + angle * math.pi / 180.0
+            ny_mat, nx_mat = dist_mat * torch.sin(beta_mat) + cy, dist_mat * torch.cos(beta_mat) + cx
+            nyl_mat, nxl_mat = torch.floor(ny_mat).type(torch.LongTensor), torch.floor(nx_mat).type(torch.LongTensor)
+            nyp_mat, nxp_mat = nyl_mat + 1, nxl_mat + 1
+            torch.clamp_(nyl_mat, min=0, max=h - 1)
+            torch.clamp_(nxl_mat, min=0, max=w - 1)
+            torch.clamp_(nyp_mat, min=0, max=h - 1)
+            torch.clamp_(nxp_mat, min=0, max=w - 1)
 
-        ny_mat, nx_mat = dist_mat * torch.sin(beta_mat) + cy, dist_mat * torch.cos(beta_mat) + cx
-        nyl_mat, nxl_mat = torch.floor(ny_mat).type(torch.LongTensor), torch.floor(nx_mat).type(torch.LongTensor)
-        nyp_mat, nxp_mat = nyl_mat + 1, nxl_mat + 1
-        torch.clamp_(nyl_mat, min=0, max=h - 1)
-        torch.clamp_(nxl_mat, min=0, max=w - 1)
-        torch.clamp_(nyp_mat, min=0, max=h - 1)
-        torch.clamp_(nxp_mat, min=0, max=w - 1)
+            nyb_cell, nxb_cell = torch.flatten(nyl_mat), torch.flatten(nxl_mat)
+            nyp_cell, nxp_cell = torch.flatten(nyp_mat), torch.flatten(nxp_mat)
 
-        nyb_cell, nxb_cell = torch.flatten(nyl_mat), torch.flatten(nxl_mat)
-        nyp_cell, nxp_cell = torch.flatten(nyp_mat), torch.flatten(nxp_mat)
+            Pll = torch.gather(input.reshape(c, h * w), dim=1, index=(nyb_cell * w + nxb_cell).repeat(c, 1)).reshape(c, h, w)
+            Plr = torch.gather(input.reshape(c, h * w), dim=1, index=(nyb_cell * w + nxp_cell).repeat(c, 1)).reshape(c, h, w)
+            Prl = torch.gather(input.reshape(c, h * w), dim=1, index=(nyp_cell * w + nxb_cell).repeat(c, 1)).reshape(c, h, w)
+            Prr = torch.gather(input.reshape(c, h * w), dim=1, index=(nyp_cell * w + nxp_cell).repeat(c, 1)).reshape(c, h, w)
 
-        Pll = torch.gather(input.reshape(c, h * w), dim=1, index=(nyb_cell * w + nxb_cell).repeat(c, 1)).reshape(c, h, w)
-        Plr = torch.gather(input.reshape(c, h * w), dim=1, index=(nyb_cell * w + nxp_cell).repeat(c, 1)).reshape(c, h, w)
-        Prl = torch.gather(input.reshape(c, h * w), dim=1, index=(nyp_cell * w + nxb_cell).repeat(c, 1)).reshape(c, h, w)
-        Prr = torch.gather(input.reshape(c, h * w), dim=1, index=(nyp_cell * w + nxp_cell).repeat(c, 1)).reshape(c, h, w)
+            nyl_mat, nxl_mat = nyl_mat.type(torch.FloatTensor), nxl_mat.type(torch.FloatTensor)
 
-        nyl_mat, nxl_mat = nyl_mat.type(torch.FloatTensor), nxl_mat.type(torch.FloatTensor)
-
-        raw = (ny_mat - nyl_mat) * (nx_mat - nxl_mat) * Prr + \
-              (ny_mat - nyl_mat) * (1.0 - nx_mat + nxl_mat) * Prl + \
-              (1.0 - ny_mat + nyl_mat) * (nx_mat - nxl_mat) * Plr + \
-              (1.0 - ny_mat + nyl_mat) * (1.0 - nx_mat + nxl_mat) * Pll
-        out = raw
-        return out
+            raw = (ny_mat - nyl_mat) * (nx_mat - nxl_mat) * Prr + \
+                  (ny_mat - nyl_mat) * (1.0 - nx_mat + nxl_mat) * Prl + \
+                  (1.0 - ny_mat + nyl_mat) * (nx_mat - nxl_mat) * Plr + \
+                  (1.0 - ny_mat + nyl_mat) * (1.0 - nx_mat + nxl_mat) * Pll
+            out = raw
+            return out
 
     def old_raw_proc(self, input, angle):
         pil = TF.to_pil_image(input)
@@ -86,10 +100,10 @@ class Rotation:
         out = TF.to_tensor(rot)
         return out
 
-    def masking(self, input):
+    def masking(self, input: torch.Tensor):
         return input * self.mask
 
-    def proc(self, input, angle):
+    def proc(self, input: torch.Tensor, angle: float):
         return self.masking(self.raw_proc(input, angle))
 
     def batch_proc(self, inputs):

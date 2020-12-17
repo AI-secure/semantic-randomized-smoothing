@@ -1,9 +1,13 @@
 
 import os
+import sys
+sys.path.append('.')
+sys.path.append('..')
 
 # evaluate a smoothed classifier on a dataset
 import argparse
-import setGPU
+# import setGPU
+from tensorboardX import SummaryWriter
 from datasets import get_dataset, DATASETS, get_num_classes, get_normalize_layer
 from semantic.core import SemanticSmooth
 from time import time
@@ -33,23 +37,40 @@ parser.add_argument("--split", choices=["train", "test"], default="test", help="
 parser.add_argument("--N0", type=int, default=100)
 parser.add_argument("--N", type=int, default=100000, help="number of samples to use")
 parser.add_argument("--alpha", type=float, default=0.001, help="failure probability")
+parser.add_argument('--gpu', default=None, type=str,
+                    help='id(s) for CUDA_VISIBLE_DEVICES')
+parser.add_argument("--th", type=float, default=0, help="pre-defined radius for true robust counting")
 args = parser.parse_args()
 
 if __name__ == "__main__":
+
+    if args.gpu:
+        os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+
     # load the base classifier
     checkpoint = torch.load(args.base_classifier)
     base_classifier = get_architecture(checkpoint["arch"], args.dataset)
+    print('arch:', checkpoint['arch'])
     if checkpoint["arch"] == 'resnet50' and args.dataset == "imagenet":
         try:
             base_classifier.load_state_dict(checkpoint['state_dict'])
-        except:
-            base_classifier = torchvision.models.resnet50(pretrained=False).cuda()
-
-            # fix
-            normalize_layer = get_normalize_layer('imagenet').cuda()
-            base_classifier = torch.nn.Sequential(normalize_layer, base_classifier)
-
-    base_classifier.load_state_dict(checkpoint['state_dict'])
+        except Exception as e:
+            print('direct load failed, try alternative')
+            try:
+                base_classifier = torchvision.models.resnet50(pretrained=False).cuda()
+                base_classifier.load_state_dict(checkpoint['state_dict'])
+                # fix
+                # normalize_layer = get_normalize_layer('imagenet').cuda()
+                # base_classifier = torch.nn.Sequential(normalize_layer, base_classifier)
+            except Exception as e:
+                print('alternative failed again, try alternative 2')
+                base_classifier = torchvision.models.resnet50(pretrained=False).cuda()
+                # base_classifier.load_state_dict(checkpoint['state_dict'])
+                normalize_layer = get_normalize_layer('imagenet').cuda()
+                base_classifier = torch.nn.Sequential(normalize_layer, base_classifier)
+                base_classifier.load_state_dict(checkpoint['state_dict'])
+    else:
+        base_classifier.load_state_dict(checkpoint['state_dict'])
 
     # prepare output file
     if not os.path.exists(os.path.dirname(args.outfile)):
@@ -69,8 +90,13 @@ if __name__ == "__main__":
         # binary search from 0.1 to 10.0
         transformer.set_contrast_scale(0.1, 10.0)
 
+    # init tensorboard writer
+    writer = SummaryWriter(os.path.dirname(args.outfile))
+
     # create the smooothed classifier g
     smoothed_classifier = SemanticSmooth(base_classifier, get_num_classes(args.dataset), transformer)
+
+    tot_clean, tot_good, tot = 0, 0, 0
 
     for i in range(len(dataset)):
 
@@ -93,5 +119,12 @@ if __name__ == "__main__":
         print("{}\t{}\t{}\t{:.3}\t{}\t{}".format(
             i, label, prediction, radius, correct, time_elapsed), file=f, flush=True)
         print(i, time_elapsed, correct, radius)
+
+        tot += 1
+        tot_clean += correct
+        tot_good += int(radius > args.th if correct > 0 else 0)
+        writer.add_scalar('certify/clean_acc', tot_clean / tot, i)
+        # writer.add_scalar('certify/robust_acc', tot_cert / tot, i)
+        writer.add_scalar('certify/true_robust_acc', tot_good / tot, i)
 
     f.close()

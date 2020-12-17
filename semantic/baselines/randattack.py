@@ -27,7 +27,7 @@ parser.add_argument('dataset', type=str, choices=DATASETS)
 parser.add_argument("base_classifier", type=str, help="path to saved pytorch model of base classifier")
 parser.add_argument('outfile', type=str, help='folder to save model and training log)')
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
-                    choices=['gaussian', 'translation',  'brightness', 'contrast', 'brightness-contrast', 'rotation', 'resize', 'rotation-brightness', 'rotation-brightness-contrast'])
+                    choices=['gaussian', 'translation',  'brightness', 'contrast', 'brightness-contrast', 'rotation', 'resize', 'resize-brightness', 'rotation-brightness', 'rotation-brightness-contrast'])
 parser.add_argument('--param1', default=None, type=float,
                     help='attack param1')
 parser.add_argument('--param2', default=None, type=float,
@@ -103,6 +103,12 @@ if __name__ == '__main__':
         # note: resize is in original scale
         tinst = T.Resize(dataset[0][0], 1.0, 1.0)
         tfunc = T.Resize.proc
+    elif args.transtype == 'resize-brightness':
+        # note: resize is in original scale
+        tinst = T.Resize(dataset[0][0], 1.0, 1.0)
+        tfunc = T.Resize.proc
+        tinst2 = T.BrightnessShift(0.0)
+        tfunc2 = T.BrightnessShift.proc
     elif args.transtype == 'rotation-brightness':
         tinst = T.Rotation(dataset[0][0], 0.0)
         tfunc = T.Rotation.proc
@@ -122,7 +128,7 @@ if __name__ == '__main__':
         param1l, param1r = 0.0, args.param1
     elif args.transtype == 'contrast':
         param1l, param1r = math.log(1.0 - args.param1), math.log(1.0 + args.param1)
-    elif args.transtype == 'resize':
+    elif args.transtype == 'resize' or args.transtype == 'resize-brightness':
         param1l, param1r = 1.0 - args.param1, 1.0 + args.param1
     else:
         param1l, param1r = -args.param1, +args.param1
@@ -130,7 +136,7 @@ if __name__ == '__main__':
     param3l, param3r = None, None
     if args.transtype == 'brightness-contrast':
         param2l, param2r = math.log(1.0 - args.param2), math.log(1.0 + args.param2)
-    elif args.transtype == 'rotation-brightness':
+    elif args.transtype == 'rotation-brightness' or args.transtype == 'resize-brightness':
         param2l, param2r = -args.param2, +args.param2
     elif args.transtype == 'rotation-brightness-contrast':
         param2l, param2r = -args.param2, +args.param2

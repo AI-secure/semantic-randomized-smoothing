@@ -5,6 +5,8 @@
 #include "transform_kern.h"
 
 #define MIN(a, b) (((a)<(b))?(a):(b))
+#define MAX(a, b) (((a)>(b))?(a):(b))
+#define EPS 1e-6
 
 using namespace std;
 
@@ -119,19 +121,49 @@ static PyObject* scaling(PyObject *self, PyObject *args) {
 
     int hw = h * w;
 
-    if ((H != h) || (W != w)) {
-        preProc(h, w);
-    }
-
     double cy = (double)(h - 1) / 2.0, cx = (double)(w - 1) / 2.0;
+
+    const int hl = MAX(ceil(cy * (1.0 - s)), 0), hr = MIN(floor(cy * (s + 1.0)), h-1);
+    const int wl = MAX(ceil(cx * (1.0 - s)), 0), wr = MIN(floor(cx * (s + 1.0)), w-1);
+
     int idx = 0;
-    for (int i=0; i<h; ++i)
-        for (int j=0; j<w; ++j) {
+
+    for (int i=hl; i<=hr; ++i) {
+        idx = i * w + wl;
+        for (int j=wl; j<=wr; ++j) {
+            const double new_y = cy + (double)(i - cy) / s, new_x = cx + (double)(j - cx) / s;
+            const int by = MIN(int(new_y), h-2), bx = MIN(int(new_x), w-2);
+            const double ky2 = new_y - (double)by, kx2 = new_x - (double)bx;
+            const double ky1 = 1.0l - ky2, kx1 = 1.0l - kx2;
+            if (c == 1) {
+                const int base = by * w + bx;
+                newImg[idx] = ((double*)(PyArray_DATA(arr)))[base] * ky1 * kx1 + \
+                    ((double*)(PyArray_DATA(arr)))[base + 1] * ky1 * kx2 + \
+                    ((double*)(PyArray_DATA(arr)))[base + w] * ky2 * kx1 + \
+                    ((double*)(PyArray_DATA(arr)))[base + w + 1] * ky2 * kx2;
+            } else
+            if (c == 3) {
+                const int base1 = by * w + bx, base2 = base1 + hw, base3 = base2 + hw;
+                newImg[idx] = ((double*)(PyArray_DATA(arr)))[base1] * ky1 * kx1 + \
+                    ((double*)(PyArray_DATA(arr)))[base1 + 1] * ky1 * kx2 + \
+                    ((double*)(PyArray_DATA(arr)))[base1 + w] * ky2 * kx1 + \
+                    ((double*)(PyArray_DATA(arr)))[base1 + w + 1] * ky2 * kx2;
+                newImg[hw + idx] = ((double*)(PyArray_DATA(arr)))[base2] * ky1 * kx1 + \
+                    ((double*)(PyArray_DATA(arr)))[base2 + 1] * ky1 * kx2 + \
+                    ((double*)(PyArray_DATA(arr)))[base2 + w] * ky2 * kx1 + \
+                    ((double*)(PyArray_DATA(arr)))[base2 + w + 1] * ky2 * kx2;
+                newImg[hw + hw + idx] = ((double*)(PyArray_DATA(arr)))[base3] * ky1 * kx1 + \
+                    ((double*)(PyArray_DATA(arr)))[base3 + 1] * ky1 * kx2 + \
+                    ((double*)(PyArray_DATA(arr)))[base3 + w] * ky2 * kx1 + \
+                    ((double*)(PyArray_DATA(arr)))[base3 + w + 1] * ky2 * kx2;
+            }
             ++idx;
         }
+    }
 
-    PyErr_SetString(excep, "Kern error: Not implemented error.\n");
-    return NULL;
+    PyObject *newArr = PyArray_SimpleNewFromData(3, arr->dimensions, NPY_DOUBLE, (void*)newImg);
+    PyArray_ENABLEFLAGS((PyArrayObject*)newArr, NPY_ARRAY_OWNDATA);
+    return Py_BuildValue("N", newArr);
 }
 
 // below are essential things for connecting Python and C++

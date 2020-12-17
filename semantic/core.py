@@ -1,10 +1,11 @@
 import torch
 from scipy.stats import norm, binom_test
 import numpy as np
-from math import ceil
+from math import ceil, sqrt
 from statsmodels.stats.proportion import proportion_confint
 from semantic.transformers import AbstractTransformer
 
+EPS = 1e-6
 
 class SemanticSmooth(object):
     """A smoothed classifier g """
@@ -22,7 +23,7 @@ class SemanticSmooth(object):
         self.num_classes = num_classes
         self.transformer = transformer
 
-    def certify(self, x: torch.tensor, n0: int, n: int, alpha: float, batch_size: int) -> (int, float):
+    def certify(self, x: torch.tensor, n0: int, maxn: int, alpha: float, batch_size: int, cAHat=None, margin_sq=None) -> (int, float):
         """ Monte Carlo algorithm for certifying that g's prediction around x is constant within some L2 radius.
         With probability at least 1 - alpha, the class returned by this method will equal g(x), and g's prediction will
         robust within a L2 ball of radius R around x.
@@ -35,24 +36,37 @@ class SemanticSmooth(object):
         :return: (predicted class, certified radius)
                  in the case of abstention, the class will be ABSTAIN and the radius 0.
         """
-        self.base_classifier.eval()
-        # draw samples of f(x+ epsilon)
-        counts_selection = self._sample_noise(x, n0, batch_size)
-        # use these samples to take a guess at the top class
-        cAHat = counts_selection.argmax().item()
-        # draw more samples of f(x + epsilon)
-        counts_estimation = self._sample_noise(x, n, batch_size)
-        # use these samples to estimate a lower bound on pA
-        nA = counts_estimation[cAHat].item()
-        pABar = self._lower_confidence_bound(nA, n, alpha)
-        if pABar < 0.5:
-            return SemanticSmooth.ABSTAIN, 0.0
-        else:
-            radius = self.transformer.calc_radius(pABar)
-            # radius = self.sigma * norm.ppf(pABar)
-            return cAHat, radius
 
-    def predict(self, x: torch.tensor, n: int, alpha: float, batch_size: int) -> int:
+        self.base_classifier.eval()
+        if cAHat is None:
+            # draw samples of f(x+ epsilon)
+            counts_selection = self._sample_noise(x, n0)
+            # use these samples to take a guess at the top class
+            cAHat = counts_selection.argmax().item()
+
+        nA, n = 0, 0
+        pABar = 0.0
+        while n < maxn:
+            now_batch = min(batch_size, maxn - n)
+            # draw more samples of f(x + epsilon)
+            counts_estimation = self._sample_noise(x, now_batch)
+            n += now_batch
+            # use these samples to estimate a lower bound on pA
+            nA += counts_estimation[cAHat].item()
+            pABar = self._lower_confidence_bound(nA, n, alpha)
+            r = self.transformer.calc_radius(pABar)
+            # early stop if margin_sq is specified
+            if margin_sq is not None and r >= sqrt(margin_sq):
+                return cAHat, r - sqrt(margin_sq)
+        if margin_sq is None:
+            if r <= EPS:
+                return SemanticSmooth.ABSTAIN, 0.0
+            else:
+                return cAHat, r
+        else:
+            return (SemanticSmooth.ABSTAIN if r <= EPS else cAHat), r - sqrt(margin_sq)
+
+    def predict(self, x: torch.tensor, n0: int, alpha: float, batch_size: int) -> int:
         """ Monte Carlo algorithm for evaluating the prediction of g at x.  With probability at least 1 - alpha, the
         class returned by this method will equal g(x).
 
@@ -66,7 +80,18 @@ class SemanticSmooth(object):
         :return: the predicted class, or ABSTAIN
         """
         self.base_classifier.eval()
-        counts = self._sample_noise(x, n, batch_size)
+
+        n = 0
+        counts = None
+        while n < n0:
+            now_batch = min(batch_size, n0 - n)
+            # draw more samples of f(x + epsilon)
+            counts_estimation = self._sample_noise(x, now_batch)
+            n += now_batch
+            if counts is None:
+                counts = counts_estimation
+            else:
+                counts += counts_estimation
         top2 = counts.argsort()[::-1][:2]
         count1 = counts[top2[0]]
         count2 = counts[top2[1]]
@@ -75,7 +100,7 @@ class SemanticSmooth(object):
         else:
             return top2[0]
 
-    def _sample_noise(self, x: torch.tensor, num: int, batch_size) -> np.ndarray:
+    def _sample_noise(self, x: torch.tensor, num: int) -> np.ndarray:
         """ Sample the base classifier's prediction under noisy corruptions of the input x.
 
         :param x: the input [channel x width x height]
@@ -85,14 +110,10 @@ class SemanticSmooth(object):
         """
         with torch.no_grad():
             counts = np.zeros(self.num_classes, dtype=int)
-            for _ in range(ceil(num / batch_size)):
-                this_batch_size = min(batch_size, num)
-                num -= this_batch_size
-
-                batch = x.repeat((this_batch_size, 1, 1, 1))
-                batch_noised = self.transformer.process(batch).cuda()
-                predictions = self.base_classifier(batch_noised).argmax(1)
-                counts += self._count_arr(predictions.cpu().numpy(), self.num_classes)
+            batch = x.repeat((num, 1, 1, 1))
+            batch_noised = self.transformer.process(batch).cuda()
+            predictions = self.base_classifier(batch_noised).argmax(1)
+            counts += self._count_arr(predictions.cpu().numpy(), self.num_classes)
             return counts
 
     def _count_arr(self, arr: np.ndarray, length: int) -> np.ndarray:
@@ -114,6 +135,10 @@ class SemanticSmooth(object):
         return proportion_confint(NA, N, alpha=2 * alpha, method="beta")[0]
 
 
+
+"""
+    Plan to gradually deprecate the following class.
+"""
 class StrictRotationSmooth(object):
     """A smoothed classifier g """
 

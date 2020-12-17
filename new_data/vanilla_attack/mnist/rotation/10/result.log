@@ -1,0 +1,2 @@
+clean 0.986,493 robust=0.96,480 500
+param1 10.0 param2 None tries 1000

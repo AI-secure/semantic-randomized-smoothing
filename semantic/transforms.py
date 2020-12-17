@@ -19,6 +19,8 @@ except Exception:
     print('Fast kernel not available, use PyTorch Kernel')
     use_kern = False
 
+EPS = 1e-6
+
 class Noise:
     def __init__(self, sigma):
         self.sigma = sigma
@@ -49,6 +51,8 @@ class Rotation:
         return random.uniform(-self.rotation_angle, self.rotation_angle)
 
     def raw_proc(self, input: torch.Tensor, angle: float):
+        if abs(angle) < EPS:
+            return input
         if use_kern:
             np_input = np.ascontiguousarray(input.numpy(), dtype=np.float)
             np_output = kern.rotation(np_input, angle)
@@ -104,7 +108,7 @@ class Rotation:
         return input * self.mask
 
     def proc(self, input: torch.Tensor, angle: float):
-        return self.masking(self.raw_proc(input, angle))
+        return self.masking(self.raw_proc(input, angle) if abs(angle) > EPS else input)
 
     def batch_proc(self, inputs):
         outs = torch.zeros_like(inputs)
@@ -239,59 +243,66 @@ class Resize:
         return random.uniform(self.sl, self.sr)
 
     def proc(self, input, s):
+        if abs(s - 1) < EPS:
+            return input
+        if use_kern:
+            np_input = np.ascontiguousarray(input.numpy(), dtype=np.float)
+            np_output = kern.scaling(np_input, s)
+            output = torch.tensor(np_output)
+            return output
+        else:
+            c, h, w = self.c, self.h, self.w
+            cy, cx = float(h - 1) / 2.0, float(w - 1) / 2.0
+            nys = (self.rows - cy) / s + cy
+            nxs = (self.cols - cx) / s + cx
 
-        c, h, w = self.c, self.h, self.w
-        cy, cx = float(h - 1) / 2.0, float(w - 1) / 2.0
-        nys = (self.rows - cy) / s + cy
-        nxs = (self.cols - cx) / s + cx
+            nysl, nxsl = torch.floor(nys), torch.floor(nxs)
+            nysr, nxsr = nysl + 1, nxsl + 1
 
-        nysl, nxsl = torch.floor(nys), torch.floor(nxs)
-        nysr, nxsr = nysl + 1, nxsl + 1
+            nysl = nysl.clamp(min=0, max=h-1).type(torch.LongTensor)
+            nxsl = nxsl.clamp(min=0, max=w-1).type(torch.LongTensor)
+            nysr = nysr.clamp(min=0, max=h-1).type(torch.LongTensor)
+            nxsr = nxsr.clamp(min=0, max=w-1).type(torch.LongTensor)
 
-        nysl = nysl.clamp(min=0, max=h-1).type(torch.LongTensor)
-        nxsl = nxsl.clamp(min=0, max=w-1).type(torch.LongTensor)
-        nysr = nysr.clamp(min=0, max=h-1).type(torch.LongTensor)
-        nxsr = nxsr.clamp(min=0, max=w-1).type(torch.LongTensor)
+            nyl_mat, nyr_mat, ny_mat = nysl.unsqueeze(1).repeat(1, w), nysr.unsqueeze(1).repeat(1, w), nys.unsqueeze(1).repeat(1, w)
+            nxl_mat, nxr_mat, nx_mat = nxsl.repeat(h, 1), nxsr.repeat(h, 1), nxs.repeat(h, 1)
 
-        nyl_mat, nyr_mat, ny_mat = nysl.unsqueeze(1).repeat(1, w), nysr.unsqueeze(1).repeat(1, w), nys.unsqueeze(1).repeat(1, w)
-        nxl_mat, nxr_mat, nx_mat = nxsl.repeat(h, 1), nxsr.repeat(h, 1), nxs.repeat(h, 1)
+            nyl_arr, nyr_arr, nxl_arr, nxr_arr = nyl_mat.flatten(), nyr_mat.flatten(), nxl_mat.flatten(), nxr_mat.flatten()
 
-        nyl_arr, nyr_arr, nxl_arr, nxr_arr = nyl_mat.flatten(), nyr_mat.flatten(), nxl_mat.flatten(), nxr_mat.flatten()
+            imgymin = max(math.ceil((1 - s) * cy), 0)
+            imgymax = min(math.floor((1 - s) * cy + s * (h - 1)), h - 1)
+            imgxmin = max(math.ceil((1 - s) * cx), 0)
+            imgxmax = min(math.floor((1 - s) * cx + s * (h - 1)), w - 1)
 
-        imgymin = max(math.ceil((1 - s) * cy), 0)
-        imgymax = min(math.floor((1 - s) * cy + s * (h - 1)), h - 1)
-        imgxmin = max(math.ceil((1 - s) * cx), 0)
-        imgxmax = min(math.floor((1 - s) * cx + s * (h - 1)), w - 1)
+            # Pll_old = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
+            #                        index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+            # Plr_old = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
+            #                        index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+            # Prl_old = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
+            #                        index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+            # Prr_old = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
+            #                        index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
 
-        # Pll_old = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
-        #                        index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-        # Plr_old = torch.gather(torch.index_select(input, dim=1, index=nyl_arr), dim=2,
-        #                        index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-        # Prl_old = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
-        #                        index=nxl_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
-        # Prr_old = torch.gather(torch.index_select(input, dim=1, index=nyr_arr), dim=2,
-        #                        index=nxr_arr.repeat(c, 1).unsqueeze(2)).reshape(c, h, w)
+            Pll = torch.gather(input.reshape(c, h * w), dim=1, index=(nxl_arr + nyl_arr * w).repeat(c, 1)).reshape(c, h, w)
+            Plr = torch.gather(input.reshape(c, h * w), dim=1, index=(nxr_arr + nyl_arr * w).repeat(c, 1)).reshape(c, h, w)
+            Prl = torch.gather(input.reshape(c, h * w), dim=1, index=(nxl_arr + nyr_arr * w).repeat(c, 1)).reshape(c, h, w)
+            Prr = torch.gather(input.reshape(c, h * w), dim=1, index=(nxr_arr + nyr_arr * w).repeat(c, 1)).reshape(c, h, w)
 
-        Pll = torch.gather(input.reshape(c, h * w), dim=1, index=(nxl_arr + nyl_arr * w).repeat(c, 1)).reshape(c, h, w)
-        Plr = torch.gather(input.reshape(c, h * w), dim=1, index=(nxr_arr + nyl_arr * w).repeat(c, 1)).reshape(c, h, w)
-        Prl = torch.gather(input.reshape(c, h * w), dim=1, index=(nxl_arr + nyr_arr * w).repeat(c, 1)).reshape(c, h, w)
-        Prr = torch.gather(input.reshape(c, h * w), dim=1, index=(nxr_arr + nyr_arr * w).repeat(c, 1)).reshape(c, h, w)
+            # print(torch.sum(torch.abs(Pll - Pll_old)))
+            # print(torch.sum(torch.abs(Plr - Plr_old)))
+            # print(torch.sum(torch.abs(Prl - Prl_old)))
+            # print(torch.sum(torch.abs(Prr - Prr_old)))
 
-        # print(torch.sum(torch.abs(Pll - Pll_old)))
-        # print(torch.sum(torch.abs(Plr - Plr_old)))
-        # print(torch.sum(torch.abs(Prl - Prl_old)))
-        # print(torch.sum(torch.abs(Prr - Prr_old)))
+            nxl_mat, nyl_mat = nxl_mat.type(torch.FloatTensor), nyl_mat.type(torch.FloatTensor)
 
-        nxl_mat, nyl_mat = nxl_mat.type(torch.FloatTensor), nyl_mat.type(torch.FloatTensor)
+            out = torch.zeros_like(input)
+            out[:, imgymin: imgymax + 1, imgxmin: imgxmax + 1] = (
+                (ny_mat - nyl_mat) * (nx_mat - nxl_mat) * Prr +
+                (1.0 - ny_mat + nyl_mat) * (nx_mat - nxl_mat) * Plr +
+                (ny_mat - nyl_mat) * (1.0 - nx_mat + nxl_mat) * Prl +
+                (1.0 - ny_mat + nyl_mat) * (1.0 - nx_mat + nxl_mat) * Pll)[:, imgymin: imgymax + 1, imgxmin: imgxmax + 1]
 
-        out = torch.zeros_like(input)
-        out[:, imgymin: imgymax + 1, imgxmin: imgxmax + 1] = (
-            (ny_mat - nyl_mat) * (nx_mat - nxl_mat) * Prr +
-            (1.0 - ny_mat + nyl_mat) * (nx_mat - nxl_mat) * Plr +
-            (ny_mat - nyl_mat) * (1.0 - nx_mat + nxl_mat) * Prl +
-            (1.0 - ny_mat + nyl_mat) * (1.0 - nx_mat + nxl_mat) * Pll)[:, imgymin: imgymax + 1, imgxmin: imgxmax + 1]
-
-        return out
+            return out
 
     def batch_proc(self, inputs):
         outs = torch.zeros_like(inputs)
@@ -301,6 +312,7 @@ class Resize:
 
 
 class Gaussian:
+    # it adopts uniform distribution
     def __init__(self, sigma):
         self.sigma = sigma
         self.sigma2 = sigma ** 2.0

@@ -28,8 +28,8 @@ if __name__ == '__main__':
     nums = [str(s) for s in nums]
     output = "\t".join(steps) + "\n" + "\t".join(nums)
     print(output)
-    print(f'Output to {args.outfile}')
-    f = open(args.outfile, 'w')
-    print(output, file=f)
+    # print(f'Output to {args.outfile}')
+    # f = open(args.outfile, 'w')
+    # print(output, file=f)
     print(f'Clean acc: {df["correct"].sum()}/{len(df)} = {df["correct"].sum()/len(df)}')
-    f.close()
+    # f.close()

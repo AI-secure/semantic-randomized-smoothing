@@ -178,6 +178,8 @@ parser.add_argument("--split", choices=["train", "test"], default="test", help="
 parser.add_argument("--slice", type=int, default=1000, help="number of angle slices")
 parser.add_argument("--subslice", type=int, default=500, help="number of subslices for maximum l2 estimation")
 parser.add_argument("--verbstep", type=int, default=10, help="print for how many subslices")
+parser.add_argument("--uniform", dest='uniform', action='store_true')
+parser.set_defaults(uniform=False)
 args = parser.parse_args()
 
 if __name__ == '__main__':
@@ -211,7 +213,7 @@ if __name__ == '__main__':
     _, h, w = dataset[0][0].shape
     dvdpts = [1.0 - 2.0 * i / (h - 1.0) for i in range(0, math.ceil((h - 1.0) / 2.0))] + \
              [1.0 - 2.0 * i / (w - 1.0) for i in range(0, math.ceil((w - 1.0) / 2.0))]
-    dvdpts = torch.unique(torch.sort(torch.tensor(dvdpts))[0])
+    dvdpts = torch.unique(torch.sort(torch.tensor(dvdpts, dtype=torch.float64))[0])
 
     for i in range(len(dataset)):
 
@@ -232,11 +234,16 @@ if __name__ == '__main__':
         global_before_time = time()
         for j in range(args.slice-1):
 
-            local_sr = 1.0 / (gbl_k * (gbl_c + j))
-            local_sl = 1.0 / (gbl_k * (gbl_c + j + 1))
+            if args.uniform:
+                local_sr = args.sr - (args.sr - args.sl) / (args.slice - 1) * j
+                local_sl = args.sr - (args.sr - args.sl) / (args.slice - 1) * (j + 1)
 
-            local_k = (1.0 / local_sl - 1.0 / local_sr) / (args.subslice - 1)
-            local_c = float(args.subslice - 1) / (local_sr / local_sl - 1.0)
+            else:
+                local_sr = 1.0 / (gbl_k * (gbl_c + j))
+                local_sl = 1.0 / (gbl_k * (gbl_c + j + 1))
+
+                local_k = (1.0 / local_sl - 1.0 / local_sr) / (args.subslice - 1)
+                local_c = float(args.subslice - 1) / (local_sr / local_sl - 1.0)
 
             max_aliasing = 0.0
 
@@ -255,36 +262,74 @@ if __name__ == '__main__':
 
             max_v_mapr, max_d_mapr = get_local_maps(x, local_sr, max(local_sl, dvdpt) + EPS)
             L_r = 2.0 * math.sqrt(2) * torch.sum(max_v_mapr * max_d_mapr * dist_map)
-            D_r = L_r * local_k / 2.0
+            if args.uniform:
+                D_r = L_r * (0.5 / local_sl - 0.5 / (local_sl + (local_sr - local_sl) / (args.subslice - 1)))
+                # print(L_r, (0.5 / local_sl - 0.5 / (local_sl + (local_sr - local_sl) / (args.subslice - 1))))
+            else:
+                D_r = L_r * local_k / 2.0
+                # print(L_r, local_k / 2.0)
             if dvdpt >= local_sl:
                 max_v_mapl, max_d_mapl = get_local_maps(x, dvdpt - EPS, local_sl)
                 L_l = 2.0 * math.sqrt(2) * torch.sum(max_v_mapl * max_d_mapl * dist_map)
-                D_l = L_l * local_k / 2.0
+                if args.uniform:
+                    D_l = L_l * (0.5 / local_sl - 0.5 / (local_sl + (local_sr - local_sl) / (args.subslice - 1)))
+                else:
+                    D_l = L_l * local_k / 2.0
 
             s_r = local_sr
             alias_k_r = 0.0
 
-            for k in range(args.subslice-1):
-                s_l = min(max(1.00 / (local_k * (local_c + k + 1)), local_sl), local_sr)
+            if args.uniform:
+                for k in range(args.subslice-1):
+                    s_l = local_sr - (local_sr - local_sl) / (args.subslice - 1) * (k + 1)
+                    # print(s_l)
 
-                x_k_l = resizer.resizer.proc(x, s_l)
-                if s_l > dvdpt:
-                    alias_k_l = torch.sum((x_k_l - base_img_r) * (x_k_l - base_img_r))
-                    D = D_r
-                elif s_l < dvdpt:
-                    alias_k_l = torch.sum((x_k_l - base_img_l) * (x_k_l - base_img_l))
-                    D = D_l
-                else:
-                    alias_k_l = min(torch.sum((x_k_l - base_img_r) * (x_k_l - base_img_r)), torch.sum((x_k_l - base_img_l) * (x_k_l - base_img_l)))
+                    x_k_l = resizer.resizer.proc(x, s_l)
+                    if s_l > dvdpt:
+                        alias_k_l = torch.sum((x_k_l - base_img_r) * (x_k_l - base_img_r))
+                        D = D_r
+                        # print(alias_k_l)
+                    elif s_l < dvdpt:
+                        alias_k_l = torch.sum((x_k_l - base_img_l) * (x_k_l - base_img_l))
+                        D = D_l
+                    else:
+                        alias_k_l = min(torch.sum((x_k_l - base_img_r) * (x_k_l - base_img_r)), torch.sum((x_k_l - base_img_l) * (x_k_l - base_img_l)))
 
-                if s_l <= dvdpt <= s_r:
-                    now_max_alias = max(alias_k_r + L_r * (1.0 / dvdpt - 1.0 / s_r), alias_k_l + L_l * (1.0 / s_l - 1.0 / dvdpt))
-                else:
-                    now_max_alias = (alias_k_l + alias_k_r) / 2.0 + D
-                max_aliasing = max(now_max_alias.item(), max_aliasing)
+                    if s_l <= dvdpt <= s_r:
+                        now_max_alias = max(alias_k_r + L_r * (1.0 / dvdpt - 1.0 / s_r),
+                                            alias_k_l + L_l * (1.0 / s_l - 1.0 / dvdpt))
+                    else:
+                        now_max_alias = (alias_k_l + alias_k_r) / 2.0 + D
+                    max_aliasing = max(now_max_alias.item(), max_aliasing)
 
-                s_r = s_l
-                alias_k_r = alias_k_l
+                    s_r = s_l
+                    alias_k_r = alias_k_l
+
+            else:
+
+                for k in range(args.subslice-1):
+                    s_l = min(max(1.00 / (local_k * (local_c + k + 1)), local_sl), local_sr)
+                    # print(s_l)
+
+                    x_k_l = resizer.resizer.proc(x, s_l)
+                    if s_l > dvdpt:
+                        alias_k_l = torch.sum((x_k_l - base_img_r) * (x_k_l - base_img_r))
+                        D = D_r
+                        # print(alias_k_l)
+                    elif s_l < dvdpt:
+                        alias_k_l = torch.sum((x_k_l - base_img_l) * (x_k_l - base_img_l))
+                        D = D_l
+                    else:
+                        alias_k_l = min(torch.sum((x_k_l - base_img_r) * (x_k_l - base_img_r)), torch.sum((x_k_l - base_img_l) * (x_k_l - base_img_l)))
+
+                    if s_l <= dvdpt <= s_r:
+                        now_max_alias = max(alias_k_r + L_r * (1.0 / dvdpt - 1.0 / s_r), alias_k_l + L_l * (1.0 / s_l - 1.0 / dvdpt))
+                    else:
+                        now_max_alias = (alias_k_l + alias_k_r) / 2.0 + D
+                    max_aliasing = max(now_max_alias.item(), max_aliasing)
+
+                    s_r = s_l
+                    alias_k_r = alias_k_l
 
             global_max_aliasing = max(global_max_aliasing, max_aliasing)
             if j % args.verbstep == 0:

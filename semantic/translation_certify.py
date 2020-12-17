@@ -1,16 +1,20 @@
 
 import os
+import sys
+sys.path.append('.')
+sys.path.append('..')
 
 # evaluate a smoothed classifier on a dataset
 import argparse
-import setGPU
-from datasets import get_dataset, DATASETS, get_num_classes
+# import setGPU
+from datasets import get_dataset, DATASETS, get_num_classes, get_normalize_layer
 from semantic.core import SemanticSmooth
 from math import ceil, sqrt
 from time import time
 import torch
 import torchvision
 import datetime
+from tensorboardX import SummaryWriter
 from architectures import get_architecture
 from semantic.transformers import gen_transformer
 from semantic.transformers import BrightnessTransformer
@@ -26,18 +30,39 @@ parser.add_argument("--skip", type=int, default=1, help="how many examples to sk
 parser.add_argument("--batch", type=int, default=1000, help="batch size")
 parser.add_argument("--max", type=int, default=-1, help="stop after this many examples")
 parser.add_argument("--split", choices=["train", "test"], default="test", help="train or test set")
+parser.add_argument("--th", type=float, default=0, help="pre-defined radius for true robust counting")
+parser.add_argument('--gpu', default=None, type=str,
+                    help='id(s) for CUDA_VISIBLE_DEVICES')
 args = parser.parse_args()
 
 if __name__ == "__main__":
+
+    if args.gpu:
+        os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+
+    # init tensorboard writer
+    writer = SummaryWriter(os.path.dirname(args.outfile))
+
     # load the base classifier
     checkpoint = torch.load(args.base_classifier)
     base_classifier = get_architecture(checkpoint["arch"], args.dataset)
     if checkpoint["arch"] == 'resnet50' and args.dataset == "imagenet":
         try:
             base_classifier.load_state_dict(checkpoint['state_dict'])
-        except:
-            base_classifier = torchvision.models.resnet50(pretrained=False).cuda()
-    base_classifier.load_state_dict(checkpoint['state_dict'])
+        except Exception as e:
+            # print(e)
+            print('direct load failed, try alternative')
+            try:
+                base_classifier = torchvision.models.resnet50(pretrained=False).cuda()
+                base_classifier.load_state_dict(checkpoint['state_dict'])
+            except Exception as e:
+                print('direct load failed again... try alternative')
+                base_classifier = torchvision.models.resnet50(pretrained=False).cuda()
+                normalize_layer = get_normalize_layer('imagenet')
+                base_classifier = torch.nn.Sequential(normalize_layer, base_classifier)
+                base_classifier.load_state_dict(checkpoint['state_dict'])
+    else:
+        base_classifier.load_state_dict(checkpoint['state_dict'])
     base_classifier.eval()
 
     # prepare output file
@@ -64,6 +89,8 @@ if __name__ == "__main__":
     disps = [(i, j) for j in range(-w, w + 1) for i in range(-h, h + 1)]
     disps = sorted(disps, key=(lambda a: a[0]**2 + a[1]**2))
     num = len(disps)
+
+    tot, tot_clean, tot_good = 0, 0, 0
 
     for i in range(len(dataset)):
 
@@ -100,8 +127,8 @@ if __name__ == "__main__":
                 wrongs = (predictions != label).tolist()
                 try:
                     nearest = wrongs.index(1)
-                    radius = disps[idx + nearest][0] ** 2 + disps[idx + nearest][1] ** 2
                     assert wrongs[nearest] == 1
+                    radius = disps[idx + nearest][0] ** 2 + disps[idx + nearest][1] ** 2
                     # print('radii', radii)
                     break
                 except ValueError:
@@ -109,6 +136,11 @@ if __name__ == "__main__":
                     # print('good')
 
                 idx += this_batch_size
+                if disps[idx-1][0] ** 2 + disps[idx-1][1] ** 2 > args.th ** 2:
+                    radius = disps[idx-1][0] ** 2 + disps[idx-1][1] ** 2
+                    break
+                else:
+                    print(disps[idx-1][0] ** 2 + disps[idx-1][1] ** 2, end='\r', flush=True)
 
         radius = sqrt(radius)
         correct = int(prediction == label)
@@ -118,5 +150,12 @@ if __name__ == "__main__":
         print("{}\t{}\t{}\t{:.3}\t{}\t{}".format(
             i, label, prediction, radius, correct, time_elapsed), file=f, flush=True)
         print(i, time_elapsed, correct, radius)
+
+        tot += 1
+        tot_clean += correct
+        tot_good += int(radius > args.th if correct > 0 else 0)
+        writer.add_scalar('certify/clean_acc', tot_clean / tot, i)
+        # writer.add_scalar('certify/robust_acc', tot_cert / tot, i)
+        writer.add_scalar('certify/true_robust_acc', tot_good / tot, i)
 
     f.close()

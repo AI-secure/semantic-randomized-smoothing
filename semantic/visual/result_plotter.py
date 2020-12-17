@@ -91,7 +91,7 @@ if __name__ == '__main__':
     i_10_x_r, i_10_y_r = robacc_reader('data/data/predict/imagenet/resnet50/translation/pretrain_noise_10.0')
     i_10_x_e, i_10_y_e = robacc_reader('data/data/predict/imagenet/resnet50/single_translation/noise_10.0')
 
-    m_fig = plotter('Comparison of Randomized Smoothing and Enumeration\n'
+    m_fig = plotter('Comparion of Randomized Smoothing and Enumeration\n'
                     'for Translation with Reflection-Padding',
                     x_name='$\sqrt{\Delta x^2 + \Delta y^2}$',
                     y_name='Robust Accuracy(%)',
@@ -106,29 +106,5 @@ if __name__ == '__main__':
     m_fig.savefig('visualize/translation_rand_smooth_enumeration_comp.pdf')
     m_fig.show()
     
-    # reflection-padding vs. black padding
 
-    # m_10_x_r, m_10_y_r = robacc_reader('data/data/predict/mnist/mnist_43/single_translation/noise_10.0')
-    m_10_x_b, m_10_y_b = robacc_reader('data/data/predict/mnist/mnist_43/single_btranslation/noise_10.0')
-    # c_10_x_r, c_10_y_r = robacc_reader('data/data/predict/cifar10/resnet110/single_translation/noise_10.0')
-    c_10_x_b, c_10_y_b = robacc_reader('data/data/predict/cifar10/resnet110/single_btranslation/noise_10.0')
-    # i_10_x_r, i_10_y_r = robacc_reader('data/data/predict/imagenet/resnet50/single_translation/noise_10.0')
-    i_10_x_b, i_10_y_b = robacc_reader('data/data/predict/imagenet/resnet50/single_btranslation/noise_10.0')
-
-    m_fig = plotter('Comparision of Translation with Reflection-Padding and Black-Padding',
-                    x_name='$\sqrt{\Delta x^2 + \Delta y^2}$',
-                    y_name='Robust Accuracy(%)',
-                    series_data=[[m_10_x_r, m_10_y_r], [m_10_x_b, m_10_y_b],
-                                 [c_10_x_r, c_10_y_r], [c_10_x_b, c_10_y_b],
-                                 [i_10_x_r, i_10_y_r], [i_10_x_b, i_10_y_b]],
-                    series_color=['r-', 'r:', 'g-', 'g:', 'b-', 'b:'],
-                    series_name=['MNIST $\sigma=10$ Refl.-Pad.',
-                                 'MNIST $\sigma=10$ Black-Pad.',
-                                 'CIFAR-10 $\sigma=10$ Refl.-Pad.',
-                                 'CIFAR-10 $\sigma=10$ Black-Pad.',
-                                 'ImageNet $\sigma=10$ Refl.-Pad.',
-                                 'ImageNet $\sigma=10$ Black-Pad.'],
-                    x_range=(0, 25))
-    m_fig.savefig('visualize/translation_reflect_black_comp.pdf')
-    m_fig.show()
 

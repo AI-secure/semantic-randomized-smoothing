@@ -1,8 +1,10 @@
 
 import semantic.transforms as transforms
 from scipy.stats import norm
+from scipy.stats import gamma as Gamma
 import math
 
+EPS = 1e-6
 
 class AbstractTransformer:
 
@@ -150,7 +152,9 @@ class BrightnessTransformer(AbstractTransformer):
             else:
                 margin = norm.ppf(pBBar) ** 2 - (k / self.sigma_k) ** 2
             if margin > 0.0:
-                return self.sigma_b * math.sqrt(margin)
+                # origin, but I now think it's wrong because of eq.15
+                # return self.sigma_b * math.sqrt(margin)
+                return self.sigma_b * math.exp(-k) * math.sqrt(margin)
         return 0.0
 
 class ContrastTransformer(BrightnessTransformer):
@@ -225,19 +229,54 @@ class ResizeNoiseTransformer(AbstractTransformer):
         return 1e+99
 
 
-class GaussianTransformer(AbstractTransformer):
+class ResizeBrightnessNoiseTransformer(AbstractTransformer):
 
+    def __init__(self, sigma, b, canopy, sl, sr):
+        super(ResizeBrightnessNoiseTransformer, self).__init__()
+        self.resize_adder = transforms.Resize(canopy, sl, sr)
+        self.noise_adder = transforms.Noise(sigma)
+        self.brightness_adder = transforms.BrightnessShift(b)
+        self.sigma = sigma
+        self.b = b
+
+    def process(self, inputs):
+        outs = inputs
+        outs = self.resize_adder.batch_proc(outs)
+        outs = self.noise_adder.batch_proc(outs)
+        if abs(self.b) > EPS:
+            outs = self.brightness_adder.batch_proc(outs)
+        return outs
+
+    def set_brightness_shift(self, b_shift):
+        self.b_shift = b_shift
+
+    def calc_radius(self, pABar: float):
+        if abs(self.b) > EPS:
+            g = (self.b_shift ** 2.) / (self.b ** 2.)
+        else:
+            g = 0.
+        if norm.ppf(pABar) ** 2. - g >= 0.:
+            radius = self.sigma * math.sqrt(norm.ppf(pABar) ** 2. - g)
+        else:
+            radius = 0.
+        return radius
+
+
+class GaussianTransformer(AbstractTransformer):
+    # uniform distribution over [0, sigma**2]
     def __init__(self, sigma):
         super(GaussianTransformer, self).__init__()
         self.gaussian_adder = transforms.Gaussian(sigma)
 
     def process(self, inputs):
-        outs = self.gaussian_adder.batch_proc(self.gaussian_adder.batch_proc(inputs))
+        outs = self.gaussian_adder.batch_proc(inputs)
+        # I don't know why previously we do this for two times
+        # outs = self.gaussian_adder.batch_proc(self.gaussian_adder.batch_proc(inputs))
         return outs
 
     def calc_radius(self, pABar: float):
         if pABar >= 0.5:
-            return self.gaussian_adder.sigma * math.sqrt(pABar - 0.5)
+            return self.gaussian_adder.sigma2 * (pABar - 0.5)
         else:
             return 0.0
 
@@ -249,12 +288,14 @@ class ExpGaussianTransformer(AbstractTransformer):
         self.gaussian_adder = transforms.ExpGaussian(sigma)
 
     def process(self, inputs):
-        outs = self.gaussian_adder.batch_proc(self.gaussian_adder.batch_proc(inputs))
+        outs = self.gaussian_adder.batch_proc(inputs)
+        # I don't know why previously we do this for two times
+        # outs = self.gaussian_adder.batch_proc(self.gaussian_adder.batch_proc(inputs))
         return outs
 
     def calc_radius(self, pABar: float):
         if pABar >= 0.5:
-            return math.sqrt(-self.gaussian_adder.sigma * math.log(2.0 - 2.0 * pABar))
+            return (-self.gaussian_adder.sigma * math.log(2.0 - 2.0 * pABar))
         else:
             return 0.0
 
@@ -278,24 +319,110 @@ class RotationBrightnessNoiseTransformer(AbstractTransformer):
         self.masking = masking
 
     def process(self, inputs):
+        # one-round rotation
+        # then add Gaussian noise
+        outs = inputs
+        for r in range(self.round):
+            outs = self.rotation_adder.batch_proc(outs)
+        outs = self.noise_adder.batch_proc(outs)
+        if abs(self.b) > EPS:
+            outs = self.brightness_adder.batch_proc(outs)
+        if self.masking:
+            outs = self.rotation_adder.batch_masking(outs)
+        return outs
+
+    def set_brightness_shift(self, b):
+        self.b_shift = b
+
+    def calc_radius(self, pABar: float):
+        if abs(self.b) > EPS:
+            g = (self.b_shift ** 2.) / (self.b ** 2.)
+        else:
+            g = 0.
+        if norm.ppf(pABar) ** 2. - g >= 0.:
+            radius = self.sigma * math.sqrt(norm.ppf(pABar) ** 2. - g)
+        else:
+            radius = 0.
+        return radius
+
+
+
+class RotationBrightnessContrastNoiseTransformer(AbstractTransformer):
+
+
+    def set_brightness_scale(self, l, r):
+        self.logk_l = math.log(l)
+        self.logk_r = math.log(r)
+
+    def set_brightness_shift(self, b):
+        self.b_shift = b
+
+    def calc_radius(self, pABar: float):
+        return min(self.calc_r_bound(self.logk_l, self.b_shift, pABar), self.calc_r_bound(self.logk_r, self.b_shift, pABar))
+
+    def calc_r_bound(self, logk: float, b_shift: float, pABar: float):
+        if logk >= 0.0:
+            t = Gamma.ppf(1. - pABar, (self.input_dim + 1) / 2.0)
+            print(t, '=>', math.exp(2. * logk) * t)
+            pBBar = 1.0 - Gamma.cdf(math.exp(2. * logk) * t, (self.input_dim + 1) / 2.0)
+        else:
+            t = Gamma.ppf(pABar, (self.input_dim + 1) / 2.0)
+            print(t, '=>', math.exp(2. * logk) * t)
+            pBBar = Gamma.cdf(math.exp(2. * logk) * t, (self.input_dim + 1) / 2.0)
+
+        # print(f'pABar = {pABar}, pBBar = {pBBar}')
+        if pBBar > 0.5:
+            margin = norm.ppf(pBBar) ** 2
+            # print(f'margin = {margin}')
+            if self.sigma_k > EPS:
+                margin -= (logk / self.sigma_k) ** 2
+            else:
+                assert abs(logk) < EPS
+            # print(f'margin - k = {margin}')
+            if self.sigma_b > EPS:
+                margin -= (math.exp(logk) * b_shift / self.sigma_b) ** 2
+            else:
+                assert abs(b_shift) < EPS
+            # print(f'margin - b = {margin}')
+            if margin > 0.0:
+                print(f'remain r = { self.sigma_b * math.exp(-logk) * math.sqrt(margin) }')
+                return self.sigma_b * math.exp(-logk) * math.sqrt(margin)
+        return 0.0
+
+
+    def __init__(self, sigma, b, k, canopy, rotation_angle=180.0):
+        super(RotationBrightnessContrastNoiseTransformer, self).__init__()
+        self.sigma = sigma
+        self.sigma_b = b
+        self.sigma_k = k
+        self.noise_adder = transforms.Noise(self.sigma)
+        self.scaler = transforms.BrightnessScale(self.sigma_k)
+        self.brightness_adder = transforms.BrightnessShift(self.sigma_b)
+        self.rotation_adder = transforms.Rotation(canopy, rotation_angle)
+        self.input_dim = canopy.numel()
+        self.round = 2
+        self.masking = True
+        self.k_l = self.k_r = 0
+
+    def set_round(self, r=1):
+        self.round = r
+
+    def enable_masking(self, masking):
+        self.masking = masking
+
+    def process(self, inputs):
         # two-round rotation for training & certifying
         # for predicting, only one-round rotation
         # then add Gaussian noise
         outs = inputs
         for r in range(self.round):
             outs = self.rotation_adder.batch_proc(outs)
-        outs = self.noise_adder.batch_proc(outs)
         outs = self.brightness_adder.batch_proc(outs)
+        outs = self.noise_adder.batch_proc(outs)
+        outs = self.scaler.batch_proc(outs)
         if self.masking:
             outs = self.rotation_adder.batch_masking(outs)
         return outs
-
-    def calc_radius(self, pABar: float, b=0.):
-        if norm.ppf(pABar) ** 2. - (b ** 2.) / (self.b ** 2.) >= 0.:
-            radius = self.sigma * math.sqrt(norm.ppf(pABar) ** 2. - (b ** 2.) / (self.b ** 2.))
-        else:
-            radius = 0.
-        return radius
 
 
 
@@ -339,6 +466,15 @@ def gen_transformer(args, canopy) -> AbstractTransformer:
         print(f'strict rotation angle in +-{args.rotation_angle} and noise in {args.noise_sd} with b noise {args.noise_b}')
         rnt = RotationBrightnessNoiseTransformer(args.noise_sd, args.noise_b, canopy, args.rotation_angle)
         rnt.set_round(1)
+        return rnt
+    elif args.transtype == 'rotation-brightness-contrast':
+        print(f'strict rotation angle in +-{args.rotation_angle} and noise in {args.noise_sd} with b noise {args.noise_b} k noise {args.noise_k}')
+        rnt = RotationBrightnessContrastNoiseTransformer(args.noise_sd, args.noise_b, args.noise_k, canopy, args.rotation_angle)
+        rnt.set_round(1)
+        return rnt
+    elif args.transtype == 'resize-brightness':
+        print(f'resize from ratio  {args.sl} to {args.sr} with noise {args.noise_sd} and b noise {args.noise_b}')
+        rnt = ResizeBrightnessNoiseTransformer(args.noise_sd, args.noise_b, canopy, args.sl, args.sr)
         return rnt
     else:
         raise NotImplementedError

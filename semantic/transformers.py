@@ -284,6 +284,7 @@ class GaussianTransformer(AbstractTransformer):
 class ExpGaussianTransformer(AbstractTransformer):
 
     def __init__(self, sigma):
+        # using Exp(1/sigma) as the smoothing distribution
         super(ExpGaussianTransformer, self).__init__()
         self.gaussian_adder = transforms.ExpGaussian(sigma)
 
@@ -299,6 +300,23 @@ class ExpGaussianTransformer(AbstractTransformer):
         else:
             return 0.0
 
+
+class FoldGaussianTransformer(AbstractTransformer):
+
+    def __init__(self, sigma):
+        # using |N(0, sigma^2)| as the smoothing distribution
+        super(FoldGaussianTransformer, self).__init__()
+        self.gaussian_adder = transforms.FoldGaussian(sigma)
+
+    def process(self, inputs):
+        outs = self.gaussian_adder.batch_proc(inputs)
+        return outs
+
+    def calc_radius(self, pABar: float):
+        if pABar >= 0.5:
+            return self.gaussian_adder.sigma * (norm.ppf(0.5 + 0.5 * pABar) - norm.ppf(0.75))
+        else:
+            return 0.0
 
 class RotationBrightnessNoiseTransformer(AbstractTransformer):
 
@@ -457,8 +475,11 @@ def gen_transformer(args, canopy) -> AbstractTransformer:
         print(f'gaussian with exponential noise from 0 to {args.noise_sd}')
         return ExpGaussianTransformer(args.noise_sd)
     elif args.transtype == 'gaussian':
-        print(f'gaussian with uniform noise from 0 to {args.noise_sd}')
+        print(f'gaussian with uniform noise from 0 to {args.noise_sd ** 2}')
         return GaussianTransformer(args.noise_sd)
+    elif args.transtype == 'foldgaussian':
+        print(f'gaussian with folded gaussian noise with noise sigma {args.noise_sd}')
+        return FoldGaussianTransformer(args.noise_sd)
     elif args.transtype == 'btranslation':
         print(f'black-padding translation with noise {args.noise_sd}')
         return BlackpadTranslationTransformer(args.noise_sd, canopy)

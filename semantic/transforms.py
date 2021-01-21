@@ -321,8 +321,8 @@ class Gaussian:
         r = random.uniform(0.0, self.sigma2)
         return r
 
-    def proc(self, input, r):
-        out = cv2.GaussianBlur(input.numpy().transpose(1, 2, 0), (0, 0), math.sqrt(r), borderType=cv2.BORDER_REFLECT101)
+    def proc(self, input, r2):
+        out = cv2.GaussianBlur(input.numpy().transpose(1, 2, 0), (0, 0), math.sqrt(r2), borderType=cv2.BORDER_REFLECT101)
         if out.ndim == 2:
             out = np.expand_dims(out, 2)
         out = torch.from_numpy(out.transpose(2, 0, 1))
@@ -335,11 +335,21 @@ class Gaussian:
         return outs
 
 class ExpGaussian(Gaussian):
+    # it adopts exponential distribution
+    # where the sigma is actually lambda in exponential distribution Exp(1/lambda)
     def __init__(self, sigma):
         super(ExpGaussian, self).__init__(sigma)
 
     def gen_param(self):
         r = - self.sigma * math.log(random.uniform(0.0, 1.0))
+        return r
+
+class FoldGaussian(Gaussian):
+    def __init__(self, sigma):
+        super(FoldGaussian, self).__init__(sigma)
+
+    def gen_param(self):
+        r = abs(random.normalvariate(0.0, self.sigma))
         return r
 
 

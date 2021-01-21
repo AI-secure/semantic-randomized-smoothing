@@ -3,7 +3,7 @@ import time
 from dateutil import parser
 
 def analyze(csv_path):
-    df = pd.read_csv(csv_path, delimiter="\t")
+    df = pd.read_csv(csv_path, delimiter="\t", skipfooter=1)
     n = len(df)
     # print(f'Total: {n} records')
     recs = list()

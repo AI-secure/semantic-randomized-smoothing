@@ -28,8 +28,8 @@ parser.add_argument('dataset', type=str, choices=DATASETS)
 parser.add_argument('arch', type=str, choices=ARCHITECTURES)
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
                     choices=['rotation-noise', 'noise', 'rotation', 'strict-rotation-noise', 'translation',
-                             'brightness', 'resize', 'gaussian', 'btranslation', 'expgaussian', 'rotation-brightness',
-                             'rotation-brightness-contrast', 'resize-brightness'])
+                             'brightness', 'resize', 'gaussian', 'btranslation', 'expgaussian', 'foldgaussian',
+                             'rotation-brightness', 'rotation-brightness-contrast', 'resize-brightness'])
 parser.add_argument('outdir', type=str, help='folder to save model and training log)')
 parser.add_argument('--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')

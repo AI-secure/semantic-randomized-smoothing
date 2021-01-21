@@ -1,2 +1,2 @@
-clean 0.744,372 robust=0.128,64 500
-param1 30.0 param2 0.2 tries 10000
+clean 0.744,372 robust=0.224,112 500
+param1 30.0 param2 0.2 tries 1000

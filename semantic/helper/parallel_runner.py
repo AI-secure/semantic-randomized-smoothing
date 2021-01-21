@@ -7,7 +7,7 @@ import setproctitle
 
 os.environ["PYTHONUNBUFFERED"] = "1"
 
-intv = 1.0
+intv = 0.1
 
 if __name__ == '__main__':
     tot_sample, num_worker = int(sys.argv[-3]), int(sys.argv[-1])

@@ -10,3 +10,4 @@ archs/__*
 *.so
 *.o
 .idea/
+new_models/

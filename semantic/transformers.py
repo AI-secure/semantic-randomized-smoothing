@@ -154,7 +154,9 @@ class BrightnessTransformer(AbstractTransformer):
             if margin > 0.0:
                 # origin, but I now think it's wrong because of eq.15
                 # return self.sigma_b * math.sqrt(margin)
-                return self.sigma_b * math.exp(-k) * math.sqrt(margin)
+                # Thanks to the bug pointed out by Adel Bibi,
+                # we changed from ``return self.sigma_b * math.exp(-k) * math.sqrt(margin)'' to:
+                return self.sigma_b * min(math.exp(-k), 1.0) * math.sqrt(margin)
         return 0.0
 
 class ContrastTransformer(BrightnessTransformer):

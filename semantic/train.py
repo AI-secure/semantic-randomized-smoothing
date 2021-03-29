@@ -29,7 +29,8 @@ parser.add_argument('arch', type=str, choices=ARCHITECTURES)
 parser.add_argument('transtype', type=str, help='type of semantic transformations',
                     choices=['rotation-noise', 'noise', 'rotation', 'strict-rotation-noise', 'translation',
                              'brightness', 'resize', 'gaussian', 'btranslation', 'expgaussian', 'foldgaussian',
-                             'rotation-brightness', 'rotation-brightness-contrast', 'resize-brightness'])
+                             'rotation-brightness', 'rotation-brightness-contrast', 'resize-brightness',
+                             'universal'])
 parser.add_argument('outdir', type=str, help='folder to save model and training log)')
 parser.add_argument('--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -55,6 +56,10 @@ parser.add_argument('--noise_k', default=0.0, type=float,
                     help="standard deviation of brightness scaling")
 parser.add_argument('--noise_b', default=0.0, type=float,
                     help="standard deviation of brightness shift")
+parser.add_argument('--blur_lamb', default=0.0, type=float,
+                    help="standard deviation of Exponential Gaussian blur, only useful when transtype is universal")
+parser.add_argument('--sigma_trans', default=0.0, type=float,
+                    help="standard deviation of translation, only useful when transtype is universal")
 parser.add_argument('--sl', default=1.0, type=float,
                     help="resize minimum ratio")
 parser.add_argument('--sr', default=1.0, type=float,

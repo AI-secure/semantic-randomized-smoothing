@@ -11,3 +11,4 @@ archs/__*
 *.o
 .idea/
 new_models/
+down_from_server/

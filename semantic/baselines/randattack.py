@@ -16,7 +16,7 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 from torch.optim import SGD, Optimizer
 from torch.optim.lr_scheduler import StepLR
-from torch.distributions import Uniform
+from torch.distributions import Uniform, Beta
 
 from datasets import get_dataset, DATASETS, get_normalize_layer
 from architectures import ARCHITECTURES, get_architecture
@@ -205,11 +205,14 @@ if __name__ == '__main__':
         c_len = candidates.shape[0]
         param1l, param1r = 0.0, c_len
 
-    m1 = Uniform(param1l, param1r)
+    # m1 = Uniform(param1l, param1r)
+    m1 = Beta(0.5, 0.5)
     if param2l is not None:
-        m2 = Uniform(param2l, param2r)
+        m2 = Beta(0.5, 0.5)
+        # m2 = Uniform(param2l, param2r)
     if param3l is not None:
-        m3 = Uniform(param3l, param3r)
+        m3 = Beta(0.5, 0.5)
+        # m3 = Uniform(param3l, param3r)
 
     tot = tot_benign = tot_robust = 0
 
@@ -240,15 +243,15 @@ if __name__ == '__main__':
                 xp = torch.zeros((now_batch, ) + tuple(x.shape))
 
                 if args.transtype == 'translation':
-                    param_sample1 = candidates[m1.sample((now_batch,)).type(torch.long)]
+                    param_sample1 = candidates[(m1.sample((now_batch,)) * (param1r - param1l) + param1l).type(torch.long)]
                     for k in range(now_batch):
                         xp[k] = tfunc(tinst, x, param_sample1[k][0].item(), param_sample1[k][1].item())
                 else:
-                    param_sample1 = m1.sample((now_batch,))
+                    param_sample1 = m1.sample((now_batch,)) * (param1r - param1l) + param1l
                     if param2l is not None:
-                        param_sample2 = m2.sample((now_batch,))
+                        param_sample2 = m2.sample((now_batch,)) * (param2r - param2l) + param2l
                     if param3l is not None:
-                        param_sample3 = m3.sample((now_batch,))
+                        param_sample3 = m3.sample((now_batch,)) * (param3r - param3l) + param3l
 
                     for k in range(now_batch):
                         xp[k] = tfunc(tinst, x, param_sample1[k])
@@ -281,7 +284,7 @@ if __name__ == '__main__':
 
     if not os.path.exists(os.path.dirname(args.outfile)):
         os.makedirs(os.path.dirname(args.outfile))
-    f = open(args.outfile, 'w')
+    f = open(args.outfile, 'a')
     f.write(f'clean {tot_benign / tot},{tot_benign} robust={tot_robust / tot},{tot_robust} {tot}\n')
     f.write(f'param1 {args.param1} param2 {args.param2} tries {args.tries}\n')
     f.close()

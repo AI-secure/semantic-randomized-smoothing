@@ -322,6 +322,8 @@ class Gaussian:
         return r
 
     def proc(self, input, r2):
+        if (abs(r2) < 1e-6):
+            return input
         out = cv2.GaussianBlur(input.numpy().transpose(1, 2, 0), (0, 0), math.sqrt(r2), borderType=cv2.BORDER_REFLECT101)
         if out.ndim == 2:
             out = np.expand_dims(out, 2)

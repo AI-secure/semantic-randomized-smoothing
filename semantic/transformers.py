@@ -446,6 +446,64 @@ class RotationBrightnessContrastNoiseTransformer(AbstractTransformer):
 
 
 
+
+class UniversalTransformer(AbstractTransformer):
+    """
+        Just for model augmentation
+        The attacker first applies brightness, contrast change, then do blurring, then do translation, then do scaling,
+        then do rotation with masking, then add Gaussian noise
+    """
+
+    def __init__(self, sigma, sigma_k, sigma_b, lamb, sigma_trans, sl, sr, rotation_angle, canopy):
+        super(UniversalTransformer, self).__init__()
+        self.sigma = sigma
+
+        self.sigma_k = sigma_k
+        self.sigma_b = sigma_b
+        self.scaler = transforms.BrightnessScale(sigma_k)
+        self.brighter = transforms.BrightnessShift(sigma_b)
+        self.gaussian_adder = transforms.ExpGaussian(lamb)
+        self.translation_adder = transforms.Translational(canopy, sigma_trans)
+        self.resize_adder = transforms.Resize(canopy, sl, sr)
+        self.rotation_adder = transforms.Rotation(canopy, rotation_angle)
+        self.noise_adder = transforms.Noise(self.sigma)
+        self.round = 1
+        self.masking = True
+
+    def set_round(self, r=1):
+        self.round = r
+
+    def enable_masking(self, masking):
+        self.masking = masking
+
+    def process(self, inputs):
+        outs = inputs
+
+        # brightness-contrast
+        outs = self.scaler.batch_proc(self.brighter.batch_proc(outs))
+
+        # Gaussian blurring
+        outs = self.gaussian_adder.batch_proc(outs)
+
+        # Translation
+        outs = self.translation_adder.batch_proc(outs)
+
+        # Scaling
+        outs = self.resize_adder.batch_proc(outs)
+
+        # Rotation
+        outs = self.rotation_adder.batch_proc(outs)
+
+        # Add Noise
+        outs = self.noise_adder.batch_proc(outs)
+
+        # Reapply black mask
+        outs = self.rotation_adder.batch_masking(outs)
+
+        return outs
+
+
+
 def gen_transformer(args, canopy) -> AbstractTransformer:
     if args.transtype == 'rotation-noise':
         print(f'rotation-noise with noise {args.noise_sd}')
@@ -498,6 +556,18 @@ def gen_transformer(args, canopy) -> AbstractTransformer:
     elif args.transtype == 'resize-brightness':
         print(f'resize from ratio  {args.sl} to {args.sr} with noise {args.noise_sd} and b noise {args.noise_b}')
         rnt = ResizeBrightnessNoiseTransformer(args.noise_sd, args.noise_b, canopy, args.sl, args.sr)
+        return rnt
+    elif args.transtype == 'universal':
+        print(f"""universal transformation: 
+    Gaussian noise = {args.noise_sd}
+    contrast and brightness noise = ({args.noise_k}, {args.noise_b})
+    Gaussian blur in exponential noise = {args.blur_lamb}
+    Translation noise = {args.sigma_trans}
+    Scaling ratio from [{args.sl}, {args.sr}]
+    Rotation angle uniformly from {args.rotation_angle}
+""")
+        rnt = UniversalTransformer(args.noise_sd, args.noise_k, args.noise_b, args.blur_lamb, args.sigma_trans,
+                                   args.sl, args.sr, args.rotation_angle, canopy)
         return rnt
     else:
         raise NotImplementedError

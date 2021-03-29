@@ -11,11 +11,15 @@ IMAGENET_LOC_ENV = "IMAGENET_DIR"
 # on aisecure gpu1
 # os.environ[IMAGENET_LOC_ENV] = "/data/datasets/imagenet/ILSVRC2012"
 # on asedl
-os.environ[IMAGENET_LOC_ENV] = "/srv/local/data/ImageNet/ILSVRC2012_full"
+# os.environ[IMAGENET_LOC_ENV] = "/srv/local/data/ImageNet/ILSVRC2012_full"
 # on asedl but mount to aisecure gpu1
 # os.environ[IMAGENET_LOC_ENV] = "/home/linyi2/data_mnt/imagenet/ILSVRC2012"
 # on asedl but sync mount
 # os.environ[IMAGENET_LOC_ENV] = "/home/linyi2/data_mnt/local_imagenet/data/ImageNet/ILSVRC2012_full"
+# on aws server
+# os.environ[IMAGENET_LOC_ENV] = '/data/imagenet/ILSVRC2012'
+# on gpu3 server
+os.environ[IMAGENET_LOC_ENV] = '/home/linyi/data/ILSVRC2012/'
 
 # list of all datasets
 DATASETS = ["imagenet", "cifar10", "mnist"]

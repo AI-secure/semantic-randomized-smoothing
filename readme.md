@@ -1,7 +1,7 @@
 ## Semantic Randomized Smoothing
 ---
 
-**News: got accepted at [CCS 2021](https://www.sigsac.org/ccs/CCS2021/), browse the pre-camera ready version [here](http://linyil.com/res/pub/TSS-CCS21.pdf)!**
+**News: the paper is accepted at [CCS 2021](https://www.sigsac.org/ccs/CCS2021/), the version of the paper is on arXiv(https://arxiv.org/abs/2002.12398).**
 
 Fork from Cohen et al's randomized smoothing code framework [(link)](https://github.com/locuslab/smoothing).
 

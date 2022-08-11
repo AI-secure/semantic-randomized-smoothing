@@ -1,13 +1,27 @@
-## Semantic Randomized Smoothing
+## TSS: Transformation-specific smoothing for robustness certification
 ---
 
-**News: the paper is accepted at [CCS 2021](https://www.sigsac.org/ccs/CCS2021/), the latest full version of the paper is on arXiv(https://arxiv.org/abs/2002.12398).**
+**The paper is presented at [CCS 2021](https://www.sigsac.org/ccs/CCS2021/), the latest full version of the paper is on arXiv(https://arxiv.org/abs/2002.12398).**
+
+If you find this work useful, please consider citing our paper:
+
+```
+@inproceedings{li2021tss,
+  title={Tss: Transformation-specific smoothing for robustness certification},
+  author={Li, Linyi and Weber, Maurice and Xu, Xiaojun and Rimanic, Luka and Kailkhura, Bhavya and Xie, Tao and Zhang, Ce and Li, Bo},
+  booktitle={Proceedings of the 2021 ACM SIGSAC Conference on Computer and Communications Security},
+  pages={535--557},
+  year={2021}
+}
+```
 
 Fork from Cohen et al's randomized smoothing code framework [(link)](https://github.com/locuslab/smoothing).
 
-We support semantic transformations including Gaussian blur, translation, brightness and contrast, rotation and scaling.
+We support semantic transformations including Gaussian blur, translation, brightness, contrast, rotation, scaling, and their compositions.
 
 The implementation is based on PyTorch framework, and requires GPU support. We recommend to run the code on GPU no lower than NVIDIA GTX 1080 Ti level. Before running the code, please install all dependencies according to `requirements.txt`.
+
+The model weights are available at Google drive: https://drive.google.com/file/d/1tW4bTnoxlAFA0KeZGQdHr6Rr9weXJSDS/view?usp=sharing
 
 ### File Structure
 
